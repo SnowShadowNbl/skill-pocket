@@ -1,0 +1,24 @@
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+*.log
+backend/.env
+backend/.env.production
+backend/data/
+deploy/certs/
+deploy/acme/
+.env
+migrate/
+
+# 语音模型文件过大（单文件 > 100MB），不进 Git；见 model/README.md
+model/*
+!model/README.md
+!model/download_models.py
+!model/hotwords.txt
+# 部署时生成 / 含密钥的文件
+deploy/letsencrypt/
+backend/.env.production
+backups/
+*.tar.gz
+.venv/

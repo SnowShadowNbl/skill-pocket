@@ -1,0 +1,74 @@
+# SkillBase 生产部署：PostgreSQL + 应用（后端 + 前端）+ FunASR 语音识别 + Nginx（HTTPS）
+# 用法见 DEPLOY.md
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: skillhub
+      POSTGRES_USER: skillhub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 里设置 POSTGRES_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skillhub -d skillhub"]
+      interval: 10s
+      retries: 5
+
+  app:
+    build: .
+    image: skillhub-app:latest
+    restart: unless-stopped
+    env_file: backend/.env.production
+    environment:
+      DATABASE_URL: postgresql+psycopg://skillhub:${POSTGRES_PASSWORD}@db:5432/skillhub
+      FUNASR_WS_URL: ws://funasr:10095
+    volumes:
+      - appdata:/app/backend/data
+      - ./backups:/app/backups:ro  # v3.3.64 运行监控读取数据库备份状态（只读）
+    depends_on:
+      db:
+        condition: service_healthy
+
+  funasr:
+    # FunASR 官方 CPU 版流式识别镜像；版本号以 FunASR 文档为准
+    image: registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.12
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      # 语音模型放在项目的 model/ 目录（首次启动自动从 ModelScope 下载，约 1GB）
+      - ./model:/workspace/models
+    # 官方 run_server_2pass.sh 会把服务放到后台后立即退出，导致容器反复重启；这里直接前台运行服务程序。
+    # 不加载语言模型（--lm-dir 留空）：省约 1GB 内存，识别效果差别很小
+    # 不加载 ITN 数字规整模型（--itn-dir 留空）：官方示例里的 thuduyu/fst_itn_zh 已从 ModelScope 下架
+    working_dir: /workspace/FunASR/runtime/websocket/build/bin
+    command: >
+      ./funasr-wss-server-2pass
+      --download-model-dir /workspace/models
+      --vad-dir damo/speech_fsmn_vad_zh-cn-16k-common-onnx
+      --model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx
+      --online-model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx
+      --punc-dir damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx
+      --itn-dir ""
+      --lm-dir ""
+      --decoder-thread-num 2 --model-thread-num 1 --io-thread-num 1
+      --port 10095 --certfile "" --keyfile ""
+      --hotword /workspace/models/hotwords.txt
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+      - ./deploy/acme:/var/www/acme
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  appdata:

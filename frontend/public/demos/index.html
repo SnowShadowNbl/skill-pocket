@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>页面风格方案对比 · SkillBase</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f5f8; color: #0f172a; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  header { max-width: 1400px; margin: 0 auto; padding: 32px 20px 8px; }
+  h1 { margin: 0; font-size: 26px; }
+  header p { margin: 8px 0 0; color: #475569; line-height: 1.7; font-size: 14.5px; }
+  .row { display: flex; gap: 22px; overflow-x: auto; padding: 24px 20px 40px; max-width: 1400px; margin: 0 auto; scroll-snap-type: x mandatory; }
+  .opt { flex: 0 0 auto; width: 300px; scroll-snap-align: start; }
+  .phone { width: 300px; height: 620px; border-radius: 36px; background: #111; padding: 10px; box-shadow: 0 30px 60px -30px rgba(15,23,42,.45); }
+  .phone iframe { width: 375px; height: 750px; border: 0; border-radius: 28px; transform: scale(.746); transform-origin: 0 0; background: #fff; }
+  .screen { width: 280px; height: 600px; border-radius: 28px; overflow: hidden; }
+  .meta { padding: 16px 4px 0; }
+  .meta h2 { margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+  .meta h2 span { font-size: 12px; font-weight: 600; color: #fff; background: #0f172a; border-radius: 6px; padding: 2px 7px; }
+  .meta p { margin: 6px 0 10px; font-size: 13.5px; color: #475569; line-height: 1.65; min-height: 66px; }
+  .kw { display: flex; flex-wrap: wrap; gap: 6px; }
+  .kw i { font-style: normal; font-size: 12px; color: #334155; background: #e8ebf2; border-radius: 6px; padding: 3px 8px; }
+  .open { display: inline-flex; margin-top: 12px; height: 40px; align-items: center; padding: 0 16px; border-radius: 10px; background: #0f172a; color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; transition: transform .2s; }
+  .open:hover { transform: translateY(-2px); }
+  .tip { max-width: 1400px; margin: 0 auto; padding: 0 20px 40px; font-size: 13px; color: #64748b; }
+</style>
+</head><body>
+<header>
+  <h1>页面风格方案对比（5 选 1）</h1>
+  <p>5 个方案使用同一份内容和交互：骨架屏加载、卡片错落入场、分类切换过渡、点卡片弹出详情抽屉、复制命令反馈、“按住说话”实时转写演示。<br>
+    手机框里可以直接点击、滚动体验；点“打开完整页面”可在桌面宽度下查看（详情会从右侧滑出）。</p>
+</header>
+<div class="row" id="row"></div>
+<p class="tip">提示：系统开启了“减少动态效果”时，所有方案都会自动关闭动画。</p>
+<script>
+const OPTS = [
+  ['a', 'A', '柔和卡片', 'Soft UI + 微交互。白底柔和阴影，悬停上浮、图标轻转，分段控件滑块平移。稳重耐看，适合长期使用。', ['柔和阴影', '上浮悬停', '弹性抽屉', '靛蓝主色']],
+  ['b', 'B', '极光玻璃', 'Aurora + 毛玻璃。背景极光色块缓慢流动，卡片半透明磨砂，渐变按钮扫光、标题流光。视觉最“炫”。', ['流动极光', '毛玻璃', '渐变流光', '模糊入场']],
+  ['c', 'C', '便当网格', 'Bento Grid。大小不一的格子布局，首卡突出“本周上升最快”，暖白底 + 黑黄撞色，弹簧缩放。杂志感强。', ['不等宽网格', '黑黄撞色', '荧光笔标题', '弹簧动效']],
+  ['d', 'D', 'Material You', 'Material 3。色调层级、胶囊按钮、点击水波纹、滚动收缩的悬浮按钮，图标从圆形变形为方块。安卓原生手感。', ['水波纹', '悬浮按钮', '形状变形', '色调层次']],
+  ['e', 'E', '弹性触感', 'Tactile / 黏土风。按钮和卡片有“可按下”的厚度，按压下沉、松手回弹，图标会晃动。活泼有趣。', ['按压下沉', '果冻回弹', '晃动图标', '珊瑚 + 青绿']],
+]
+document.getElementById('row').innerHTML = OPTS.map(([f, k, name, desc, kws]) => `
+  <section class="opt">
+    <div class="phone"><div class="screen"><iframe src="${f}.html" title="方案 ${k} ${name}" loading="lazy"></iframe></div></div>
+    <div class="meta">
+      <h2><span>${k}</span>${name}</h2>
+      <p>${desc}</p>
+      <div class="kw">${kws.map((w) => `<i>${w}</i>`).join('')}</div>
+      <a class="open" href="${f}.html" target="_blank">打开完整页面 →</a>
+    </div>
+  </section>`).join('')
+</script>
+</body></html>

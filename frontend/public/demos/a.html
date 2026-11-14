@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>柔和卡片 · SkillBase</title>
+<link rel="stylesheet" href="common.css">
+<style>
+:root{--p:#4f46e5;--p2:#4338ca;--ink:#0f172a;--ink2:#475569;--mute:#64748b;--line:#e6e9f2;--bg:#f5f7fb;--ease:cubic-bezier(.2,.8,.2,1)}
+body{background:var(--bg);color:var(--ink)}
+.topbar{background:rgba(245,247,251,.82);backdrop-filter:saturate(1.6) blur(12px);-webkit-backdrop-filter:saturate(1.6) blur(12px);border-bottom:1px solid transparent;transition:border-color .25s}
+.topbar.scrolled{border-color:var(--line)}
+.logo-mark{border-radius:10px;background:var(--p);color:#fff;box-shadow:0 6px 16px -6px rgba(79,70,229,.6)}
+.btn{border-radius:12px;transition:transform .15s var(--ease),background .2s,box-shadow .25s,border-color .2s,color .2s}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--p);color:#fff;box-shadow:0 8px 20px -10px rgba(79,70,229,.8)}
+.btn-primary:hover{background:var(--p2);box-shadow:0 14px 28px -12px rgba(79,70,229,.9)}
+.btn-ghost{color:var(--ink2);background:#fff;border:1px solid var(--line)}
+.btn-ghost:hover{border-color:#cdd3e1;color:var(--ink)}
+.hero h1{font-weight:800}.hero h1 em{font-style:normal;color:var(--p)}.hero p{color:var(--ink2)}
+.search>svg{color:var(--mute)}
+.search input{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04);transition:border-color .2s,box-shadow .25s}
+.search input:focus{border-color:var(--p);box-shadow:0 0 0 4px rgba(79,70,229,.12)}
+.stats>div{background:#fff;border-radius:14px;border:1px solid var(--line)}.stats span{color:var(--mute)}
+.chip{border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--ink2);transition:all .22s var(--ease)}
+.chip:hover{border-color:#cdd3e1;transform:translateY(-1px)}
+.chip svg{color:var(--c)}
+.chip.active{background:var(--ink);color:#fff;border-color:var(--ink)}.chip.active svg{color:#fff}
+.list-head{color:var(--mute)}
+.seg{background:#eaedf5;border-radius:10px}
+.seg::before{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(15,23,42,.12);transition:transform .3s var(--ease),width .3s var(--ease)}
+.seg button{color:var(--ink2);transition:color .2s}.seg button.active{color:var(--ink);font-weight:600}
+.card{background:#fff;border-radius:18px;border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.04);opacity:0;transform:translateY(18px);transition:opacity .5s var(--ease),transform .5s var(--ease),box-shadow .3s,border-color .3s}
+.card.in{opacity:1;transform:none}
+.card.in:hover{transform:translateY(-5px);box-shadow:0 22px 44px -20px rgba(15,23,42,.28);border-color:transparent}
+.card.in:active{transform:translateY(-1px) scale(.99)}
+.card-cover{background:var(--cs);margin:8px 8px 0;border-radius:12px}
+.card-icon{background:#fff;color:var(--c);border-radius:18px;box-shadow:0 10px 22px -12px var(--c);transition:transform .4s var(--ease)}
+.card:hover .card-icon{transform:scale(1.1) rotate(-6deg)}
+.card-rise{background:#fff;color:#15803d;border-radius:999px}
+.stars{color:var(--ink2)}.stars svg{color:#f59e0b;fill:#f59e0b}
+.card p{color:var(--ink2)}
+.tag{border-radius:8px}.tag-cat{background:var(--cs);color:var(--c)}
+.tag-src.auto{background:#ecfdf3;color:#15803d}.tag-src.manual{background:#fff7e6;color:#b45309}
+.skeleton .card-cover,.skeleton .bar{background:linear-gradient(90deg,#eef1f6 25%,#f8f9fc 50%,#eef1f6 75%);background-size:200% 100%;animation:shimmer 1.2s infinite}
+.skeleton .bar{border-radius:6px}
+.tabbar{background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+.tabbar a{color:var(--mute);transition:color .2s}.tabbar a.active{color:var(--p)}
+.tabbar a svg{transition:transform .25s var(--ease)}.tabbar a:active svg{transform:scale(.82)}
+.overlay{background:rgba(15,23,42,.35);transition:opacity .35s}
+.sheet{background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -20px 50px -20px rgba(15,23,42,.3);transition:transform .5s var(--ease),visibility .5s}
+@media(min-width:768px){.sheet{border-radius:22px 0 0 22px}}
+.sheet-handle{background:#dfe3ec}
+.sheet-icon{background:var(--cs);color:var(--c);border-radius:16px}
+.sheet-close{border-radius:12px;color:var(--mute);transition:background .2s,transform .3s var(--ease)}.sheet-close:hover{background:#f1f3f8;transform:rotate(90deg)}
+.tag-group{background:#f1f3f8;color:var(--ink2)}
+.sheet-summary,.sheet-desc p{color:var(--ink2)}.sheet-meta{color:var(--mute)}.sheet-meta svg{color:#f59e0b}
+.step-n{background:var(--p);color:#fff;border-radius:8px}
+.code{background:#0f172a;border-radius:12px}.code code{color:#e2e8f0}
+.copy{border-radius:8px;color:#cbd5e1;border:1px solid rgba(255,255,255,.16);transition:all .2s}.copy:hover{background:rgba(255,255,255,.08)}.copy.copied{color:#4ade80;border-color:#4ade80}
+.composer textarea{border:1px solid var(--line);border-radius:14px;background:#fafbfd;transition:border-color .2s,box-shadow .2s,background .2s}
+.composer textarea:focus{border-color:var(--p);box-shadow:0 0 0 4px rgba(79,70,229,.1);background:#fff}
+.mic.recording{background:#fee2e2;color:#dc2626;border-color:#fecaca}.wave i{background:#dc2626}
+.comments li{border-top:1px solid var(--line)}.comments time,.comments li.none{color:var(--mute)}
+.toast{background:var(--ink);color:#fff;border-radius:12px;transition:all .3s var(--ease)}
+.empty{color:var(--mute)}
+</style>
+</head><body class="a">
+<header class="topbar"><div class="wrap topbar-in">
+  <a class="logo"><span class="logo-mark"><i data-icon="puzzle" data-size="19"></i></span><span>SkillBase</span></a>
+  <nav class="topnav"><a class="btn btn-ghost"><i data-icon="layers" data-size="17"></i>分类管理</a><a class="btn btn-primary"><i data-icon="plus" data-size="17"></i>加入条目</a></nav>
+</div></header>
+
+<section class="hero wrap">
+  <h1>发现好用的 <em>Skill</em> 与 AI 模型</h1>
+  <p>每天凌晨自动采集 GitHub 星标增速榜，附中文介绍与安装方法</p>
+  <div class="search"><i data-icon="search" data-size="20"></i><input id="search" type="search" enterkeyhint="search" placeholder="搜索名称、功能描述、仓库" aria-label="搜索"></div>
+  <div class="stats"><div><b data-count="128">0</b><span>收录条目</span></div><div><b data-count="46">0</b><span>细分类别</span></div><div><b data-count="12">0</b><span>今日新增</span></div></div>
+</section>
+<main class="wrap">
+  <div id="chips" class="chips" role="tablist" aria-label="分类"></div>
+  <div class="list-head"><span id="count"></span><div class="seg" role="group" aria-label="排序"><button class="active" data-sort="stars">按星标</button><button data-sort="new">最新收录</button></div></div>
+  <div id="list" class="list"></div>
+</main>
+
+<nav class="tabbar" aria-label="主导航"><a class="active"><i data-icon="home" data-size="22"></i><span>首页</span></a><a><i data-icon="plus" data-size="22"></i><span>加入</span></a><a><i data-icon="layers" data-size="22"></i><span>分类</span></a></nav>
+<div id="overlay" class="overlay"></div>
+<aside id="sheet" class="sheet" role="dialog" aria-modal="true"></aside>
+<div id="toast" class="toast" role="status"></div>
+<a class="demo-switch" href="index.html">← 返回方案对比</a>
+<script>window.DEMO={}</script>
+<script src="data.js"></script>
+<script src="common.js"></script>
+</body></html>

@@ -1,0 +1,6 @@
+SkillBase 20
+Skill 15
+GitHub 15
+Claude 15
+DeepSeek 15
+MCP 15

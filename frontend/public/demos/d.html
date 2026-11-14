@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Material You · SkillBase</title>
+<link rel="stylesheet" href="common.css">
+<style>
+:root{--p:#6750a4;--onp:#fff;--pc:#eaddff;--sc:#e8def8;--onsc:#1d192b;--surf:#fef7ff;--c1:#f7f2fa;--c2:#f3edf7;--c3:#ece6f0;--ink:#1d1b20;--ink2:#49454f;--outline:#79747e;--ol:#cac4d0;--emph:cubic-bezier(.2,0,0,1);--dec:cubic-bezier(.3,0,.8,.15)}
+body{background:var(--surf);color:var(--ink)}
+.topbar{background:var(--surf);transition:background .4s var(--emph)}
+.topbar.scrolled{background:var(--c2)}
+.logo-mark{border-radius:12px;background:var(--pc);color:#21005d}
+.btn{border-radius:999px;font-weight:500;letter-spacing:.01em;transition:box-shadow .3s var(--emph),background .3s}
+.btn-primary{background:var(--p);color:var(--onp)}.btn-primary:hover{box-shadow:0 1px 3px rgba(0,0,0,.2),0 2px 6px 2px rgba(0,0,0,.1)}
+.btn-ghost{color:var(--p);border:1px solid var(--outline)}.btn-ghost:hover{background:rgba(103,80,164,.08)}
+.hero h1{font-weight:400;letter-spacing:-.01em}.hero h1 em{font-style:normal;font-weight:600;color:var(--p)}
+.hero p{color:var(--ink2)}
+.search>svg{color:var(--ink2)}
+.search input{background:var(--c3);border:0;border-radius:28px;transition:background .3s var(--emph),box-shadow .3s}
+.search input:focus{background:var(--c2);box-shadow:inset 0 0 0 2px var(--p)}
+.stats>div{background:var(--c1);border-radius:16px}.stats b{color:var(--p)}.stats span{color:var(--ink2)}
+.chip{border-radius:8px;border:1px solid var(--outline);color:var(--ink2);transition:background .3s var(--emph),border-color .3s,padding .3s var(--emph)}
+.chip:hover{background:rgba(73,69,79,.08)}
+.chip svg{color:var(--ink2);transition:transform .35s var(--emph)}
+.chip.active{background:var(--sc);color:var(--onsc);border-color:transparent}
+.chip.active svg{transform:scale(1.15);color:var(--onsc)}
+.list-head{color:var(--ink2)}
+.seg{border:1px solid var(--outline);border-radius:999px;padding:0}
+.seg::before{top:0;bottom:0;left:0;border-radius:999px;background:var(--sc);transition:transform .5s var(--emph),width .5s var(--emph)}
+.seg button{height:38px;padding:0 16px;color:var(--ink);transition:color .3s}.seg button.active{color:var(--onsc);font-weight:600}
+.card{border-radius:16px;background:var(--c1);opacity:0;transform:scale(.92);transform-origin:50% 0;transition:opacity .5s var(--emph),transform .6s var(--emph),background .3s,box-shadow .3s var(--emph)}
+.card.in{opacity:1;transform:none}
+.card::after{content:"";position:absolute;inset:0;background:var(--p);opacity:0;transition:opacity .2s;pointer-events:none}
+.card.in:hover{box-shadow:0 1px 2px rgba(0,0,0,.3),0 1px 3px 1px rgba(0,0,0,.15)}
+.card:hover::after{opacity:.06}.card:active::after{opacity:.1}
+.card-cover{background:var(--cs);margin:0}
+.card-icon{border-radius:50%;background:var(--surf);color:var(--c);transition:border-radius .5s var(--emph),transform .5s var(--emph)}
+.card:hover .card-icon{border-radius:18px;transform:rotate(45deg)}
+.card:hover .card-icon svg{transform:rotate(-45deg)}
+.card-icon svg{transition:transform .5s var(--emph)}
+.card-rise{border-radius:8px;background:var(--surf);color:#146c2e}
+.stars{color:var(--ink2)}.stars svg{color:var(--p);fill:var(--p)}
+.card p{color:var(--ink2)}
+.tag{border-radius:8px}.tag-cat{background:var(--sc);color:var(--onsc)}
+.tag-src.auto{background:#c4eed0;color:#0a3818}.tag-src.manual{background:#ffdbcb;color:#341100}
+.skeleton .card-cover,.skeleton .bar{background:linear-gradient(90deg,var(--c3) 25%,var(--c1) 50%,var(--c3) 75%);background-size:200% 100%;animation:shimmer 1.3s infinite}
+.skeleton .bar{border-radius:4px}
+.tabbar{background:var(--c2);height:calc(80px + env(safe-area-inset-bottom))}
+.tabbar a{color:var(--ink2);font-size:12px;font-weight:500;gap:4px}
+.tabbar a svg{box-sizing:content-box;padding:4px 20px;border-radius:999px;transition:background .4s var(--emph),padding .4s var(--emph)}
+.tabbar a.active{color:var(--ink)}.tabbar a.active svg{background:var(--sc);color:var(--onsc)}
+.fab{position:fixed;right:16px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:31;height:56px;padding:0 20px;border-radius:16px;background:var(--pc);color:#21005d;display:flex;align-items:center;gap:10px;font-weight:600;box-shadow:0 3px 6px rgba(0,0,0,.15),0 6px 14px rgba(0,0,0,.12);transition:padding .4s var(--emph),gap .4s var(--emph),transform .3s var(--emph);overflow:hidden}
+.fab span{max-width:120px;white-space:nowrap;overflow:hidden;transition:max-width .4s var(--emph),opacity .3s}
+.fab.shrink{padding:0 16px;gap:0}.fab.shrink span{max-width:0;opacity:0}
+.fab:active{transform:scale(.95)}
+@media(min-width:768px){.fab{bottom:28px;right:28px}}
+.overlay{background:rgba(29,27,32,.32);transition:opacity .4s var(--emph)}
+.sheet{background:var(--c1);border-radius:28px 28px 0 0;transition:transform .5s var(--emph),visibility .5s}
+.sheet:not(.open){transition:transform .25s var(--dec),visibility .25s}
+@media(min-width:768px){.sheet{border-radius:28px 0 0 28px}}
+.sheet-handle{width:32px;height:4px;background:var(--outline);opacity:.4}
+.sheet-icon{border-radius:16px;background:var(--cs);color:var(--c)}
+.sheet-close{border-radius:999px;color:var(--ink2);transition:background .2s}.sheet-close:hover{background:rgba(73,69,79,.08)}
+.sheet h2{font-weight:400;font-size:24px}
+.tag-group{background:var(--c3);color:var(--ink2)}
+.sheet-summary,.sheet-desc p{color:var(--ink2)}.sheet-meta{color:var(--ink2)}.sheet-meta svg{color:var(--p)}
+.sheet h4{font-weight:500;color:var(--p)}
+.step-n{border-radius:50%;background:var(--p);color:#fff}
+.code{border-radius:12px;background:#322f35}.code code{color:#f5eff7}
+.copy{border-radius:999px;color:#d0bcff;transition:background .2s}.copy:hover{background:rgba(208,188,255,.12)}.copy.copied{color:#b6f2c2}
+.composer textarea{border:1px solid var(--outline);border-radius:4px 4px 0 0;border-width:0 0 1px;background:var(--c3);transition:border-color .2s,box-shadow .2s}
+.composer textarea:focus{border-color:var(--p);box-shadow:inset 0 -1px 0 var(--p)}
+.mic{border:1px solid var(--outline);color:var(--p)}.mic.recording{background:#ffd8e4;color:#8c1d18;border-color:transparent}.wave i{background:var(--p)}
+.comments li{border-top:1px solid var(--ol)}.comments time,.comments li.none{color:var(--ink2)}
+.toast{background:#322f35;color:#f5eff7;border-radius:4px;transition:all .4s var(--emph)}
+.ripple{background:var(--p);opacity:.16}.btn-primary .ripple{background:#fff;opacity:.3}
+.empty{color:var(--ink2)}
+</style>
+</head><body class="d">
+<header class="topbar"><div class="wrap topbar-in">
+  <a class="logo"><span class="logo-mark"><i data-icon="puzzle" data-size="19"></i></span><span>SkillBase</span></a>
+  <nav class="topnav"><a class="btn btn-ghost"><i data-icon="layers" data-size="17"></i>分类管理</a><a class="btn btn-primary"><i data-icon="plus" data-size="17"></i>加入条目</a></nav>
+</div></header>
+
+<section class="hero wrap">
+  <h1>发现好用的 <em>Skill</em> 与 AI 模型</h1>
+  <p>每天凌晨自动采集 GitHub 星标增速榜，附中文介绍与安装方法</p>
+  <div class="search"><i data-icon="search" data-size="20"></i><input id="search" type="search" enterkeyhint="search" placeholder="搜索名称、功能描述、仓库" aria-label="搜索"></div>
+  <div class="stats"><div><b data-count="128">0</b><span>收录条目</span></div><div><b data-count="46">0</b><span>细分类别</span></div><div><b data-count="12">0</b><span>今日新增</span></div></div>
+</section>
+<main class="wrap">
+  <div id="chips" class="chips" role="tablist" aria-label="分类"></div>
+  <div class="list-head"><span id="count"></span><div class="seg" role="group" aria-label="排序"><button class="active" data-sort="stars">按星标</button><button data-sort="new">最新收录</button></div></div>
+  <div id="list" class="list"></div>
+</main>
+<button class="fab" aria-label="加入条目"><i data-icon="plus" data-size="22"></i><span>加入条目</span></button>
+<nav class="tabbar" aria-label="主导航"><a class="active"><i data-icon="home" data-size="22"></i><span>首页</span></a><a><i data-icon="plus" data-size="22"></i><span>加入</span></a><a><i data-icon="layers" data-size="22"></i><span>分类</span></a></nav>
+<div id="overlay" class="overlay"></div>
+<aside id="sheet" class="sheet" role="dialog" aria-modal="true"></aside>
+<div id="toast" class="toast" role="status"></div>
+<a class="demo-switch" href="index.html">← 返回方案对比</a>
+<script>window.DEMO={ripple:true,init(){const f=document.querySelector('.fab');let y=scrollY;addEventListener('scroll',()=>{f.classList.toggle('shrink',scrollY>y&&scrollY>80);y=scrollY},{passive:true})}}</script>
+<script src="data.js"></script>
+<script src="common.js"></script>
+</body></html>

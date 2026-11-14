@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>极光玻璃 · SkillBase</title>
+<link rel="stylesheet" href="common.css">
+<style>
+:root{--p1:#6366f1;--p2:#ec4899;--ink:#1e1b4b;--ink2:#4b5563;--mute:#6b7280;--glass:rgba(255,255,255,.58);--edge:rgba(255,255,255,.85);--ease:cubic-bezier(.22,1,.36,1)}
+body{background:#f5f6ff;color:var(--ink);min-height:100vh}
+.aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.aurora i{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(70px);opacity:.55;animation:drift 18s ease-in-out infinite alternate}
+.aurora i:nth-child(1){background:#a5b4fc;left:-15vmax;top:-20vmax}
+.aurora i:nth-child(2){background:#f9a8d4;right:-20vmax;top:5vmax;animation-duration:22s;animation-delay:-6s}
+.aurora i:nth-child(3){background:#99f6e4;left:20vmax;bottom:-30vmax;animation-duration:26s;animation-delay:-12s}
+@keyframes drift{0%{transform:translate(0,0) scale(1)}50%{transform:translate(6vmax,4vmax) scale(1.12)}100%{transform:translate(-4vmax,8vmax) scale(.95)}}
+.glass,.topbar,.stats>div,.card,.chip,.seg,.tabbar,.search input{background:var(--glass);backdrop-filter:blur(18px) saturate(1.5);-webkit-backdrop-filter:blur(18px) saturate(1.5);border:1px solid var(--edge)}
+.topbar{border-width:0 0 1px;background:rgba(255,255,255,.35);transition:background .3s}
+.topbar.scrolled{background:rgba(255,255,255,.7)}
+.logo-mark{border-radius:12px;color:#fff;background:linear-gradient(135deg,var(--p1),var(--p2))}
+.btn{border-radius:14px;transition:transform .2s var(--ease),box-shadow .3s,background .3s}
+.btn:active{transform:scale(.96)}
+.btn-primary{color:#fff;background:linear-gradient(135deg,var(--p1),var(--p2));box-shadow:0 10px 24px -10px rgba(99,102,241,.7)}
+.btn-primary::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);transform:translateX(-120%);transition:transform .7s var(--ease)}
+.btn-primary:hover::after{transform:translateX(120%)}
+.btn-primary:hover{box-shadow:0 16px 32px -12px rgba(236,72,153,.6)}
+.btn-ghost{background:rgba(255,255,255,.5);border:1px solid var(--edge);color:var(--ink)}
+.btn-ghost:hover{background:rgba(255,255,255,.8)}
+.hero h1{font-weight:800}
+.hero h1 em{font-style:normal;background:linear-gradient(90deg,var(--p1),var(--p2),#14b8a6,var(--p1));background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:flow 8s linear infinite}
+@keyframes flow{to{background-position:300% 0}}
+.hero p{color:var(--ink2)}
+.search>svg{color:var(--mute)}
+.search input{border-radius:18px;transition:box-shadow .3s,background .3s}
+.search input:focus{background:rgba(255,255,255,.85);box-shadow:0 0 0 4px rgba(99,102,241,.18),0 12px 30px -14px rgba(99,102,241,.5)}
+.stats>div{border-radius:16px}.stats b{background:linear-gradient(135deg,var(--p1),var(--p2));-webkit-background-clip:text;background-clip:text;color:transparent}.stats span{color:var(--mute)}
+.chip{border-radius:999px;color:var(--ink2);transition:all .3s var(--ease)}
+.chip:hover{background:rgba(255,255,255,.85);transform:translateY(-2px)}
+.chip svg{color:var(--c)}
+.chip.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--p1),var(--p2));box-shadow:0 8px 20px -10px rgba(99,102,241,.8)}.chip.active svg{color:#fff}
+.list-head{color:var(--mute)}
+.seg{border-radius:12px}
+.seg::before{border-radius:9px;background:linear-gradient(135deg,var(--p1),var(--p2));transition:transform .45s var(--ease),width .45s var(--ease)}
+.seg button{color:var(--ink2);transition:color .3s}.seg button.active{color:#fff;font-weight:600}
+.card{border-radius:22px;box-shadow:0 10px 30px -18px rgba(76,81,191,.35);opacity:0;transform:translateY(24px) scale(.97);filter:blur(4px);transition:opacity .7s var(--ease),transform .7s var(--ease),filter .7s var(--ease),box-shadow .4s,background .4s}
+.card.in{opacity:1;transform:none;filter:none}
+.card.in:hover{transform:translateY(-6px);background:rgba(255,255,255,.78);box-shadow:0 24px 48px -20px rgba(99,102,241,.45)}
+.card-cover{background:transparent}
+.card-cover::before{content:"";position:absolute;width:120px;height:120px;border-radius:50%;background:var(--c);opacity:.18;filter:blur(24px);transition:transform .6s var(--ease),opacity .4s}
+.card:hover .card-cover::before{transform:scale(1.4);opacity:.3}
+.card-icon{position:relative;border-radius:20px;color:var(--c);background:rgba(255,255,255,.75);border:1px solid var(--edge);animation:float 4s ease-in-out infinite;animation-delay:calc(var(--i) * -.6s)}
+@keyframes float{50%{transform:translateY(-6px)}}
+.card-rise{border-radius:999px;color:#047857;background:rgba(255,255,255,.75)}
+.stars{color:var(--ink2)}.stars svg{color:#f59e0b;fill:#f59e0b}
+.card p{color:var(--ink2)}
+.tag{border-radius:999px}.tag-cat{background:rgba(255,255,255,.7);color:var(--c);border:1px solid var(--edge)}
+.tag-src.auto{background:rgba(16,185,129,.12);color:#047857}.tag-src.manual{background:rgba(245,158,11,.14);color:#b45309}
+.skeleton .card-cover,.skeleton .bar{background:linear-gradient(90deg,rgba(255,255,255,.4) 25%,rgba(255,255,255,.9) 50%,rgba(255,255,255,.4) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite}
+.skeleton .bar{border-radius:8px}.skeleton{filter:none!important}
+.tabbar{border-width:1px 0 0;background:rgba(255,255,255,.7)}
+.tabbar a{color:var(--mute);transition:color .3s}.tabbar a.active{color:var(--p1)}
+.overlay{background:rgba(30,27,75,.18);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:opacity .4s}
+.sheet{background:rgba(255,255,255,.82);backdrop-filter:blur(28px) saturate(1.6);-webkit-backdrop-filter:blur(28px) saturate(1.6);border:1px solid var(--edge);border-radius:28px 28px 0 0;box-shadow:0 -24px 60px -24px rgba(76,81,191,.45);transition:transform .6s var(--ease),visibility .6s}
+@media(min-width:768px){.sheet{border-radius:28px 0 0 28px}}
+.sheet-handle{background:rgba(30,27,75,.15)}
+.sheet-icon{border-radius:18px;color:#fff;background:linear-gradient(135deg,var(--c),var(--p2))}
+.sheet-close{border-radius:14px;color:var(--mute);transition:background .3s,transform .4s var(--ease)}.sheet-close:hover{background:rgba(255,255,255,.9);transform:rotate(90deg)}
+.tag-group{background:rgba(99,102,241,.1);color:var(--p1)}
+.sheet-summary,.sheet-desc p{color:var(--ink2)}.sheet-meta{color:var(--mute)}.sheet-meta svg{color:#f59e0b}
+.step-n{border-radius:10px;color:#fff;background:linear-gradient(135deg,var(--p1),var(--p2))}
+.code{border-radius:14px;background:#1e1b4b}.code code{color:#e0e7ff}
+.copy{border-radius:10px;color:#c7d2fe;border:1px solid rgba(255,255,255,.2);transition:all .25s}.copy:hover{background:rgba(255,255,255,.1)}.copy.copied{color:#6ee7b7;border-color:#6ee7b7}
+.composer textarea{border-radius:16px;background:rgba(255,255,255,.6);border:1px solid var(--edge);transition:box-shadow .3s,background .3s}
+.composer textarea:focus{background:#fff;box-shadow:0 0 0 4px rgba(99,102,241,.15)}
+.mic.recording{background:linear-gradient(135deg,#f43f5e,var(--p2));color:#fff;box-shadow:0 0 0 0 rgba(244,63,94,.5);animation:pulse 1.4s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 14px rgba(244,63,94,0)}100%{box-shadow:0 0 0 0 rgba(244,63,94,0)}}
+.wave i{background:linear-gradient(var(--p1),var(--p2))}
+.comments li{border-top:1px solid rgba(30,27,75,.08)}.comments time,.comments li.none{color:var(--mute)}
+.toast{border-radius:14px;color:#fff;background:linear-gradient(135deg,var(--p1),var(--p2));transition:all .4s var(--ease)}
+.empty{color:var(--mute)}
+</style>
+</head><body class="b">
+<header class="topbar"><div class="wrap topbar-in">
+  <a class="logo"><span class="logo-mark"><i data-icon="puzzle" data-size="19"></i></span><span>SkillBase</span></a>
+  <nav class="topnav"><a class="btn btn-ghost"><i data-icon="layers" data-size="17"></i>分类管理</a><a class="btn btn-primary"><i data-icon="plus" data-size="17"></i>加入条目</a></nav>
+</div></header>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<section class="hero wrap">
+  <h1>发现好用的 <em>Skill 与 AI 模型</em></h1>
+  <p>每天凌晨自动采集 GitHub 星标增速榜，附中文介绍与安装方法</p>
+  <div class="search"><i data-icon="search" data-size="20"></i><input id="search" type="search" enterkeyhint="search" placeholder="搜索名称、功能描述、仓库" aria-label="搜索"></div>
+  <div class="stats"><div><b data-count="128">0</b><span>收录条目</span></div><div><b data-count="46">0</b><span>细分类别</span></div><div><b data-count="12">0</b><span>今日新增</span></div></div>
+</section>
+<main class="wrap">
+  <div id="chips" class="chips" role="tablist" aria-label="分类"></div>
+  <div class="list-head"><span id="count"></span><div class="seg" role="group" aria-label="排序"><button class="active" data-sort="stars">按星标</button><button data-sort="new">最新收录</button></div></div>
+  <div id="list" class="list"></div>
+</main>
+
+<nav class="tabbar" aria-label="主导航"><a class="active"><i data-icon="home" data-size="22"></i><span>首页</span></a><a><i data-icon="plus" data-size="22"></i><span>加入</span></a><a><i data-icon="layers" data-size="22"></i><span>分类</span></a></nav>
+<div id="overlay" class="overlay"></div>
+<aside id="sheet" class="sheet" role="dialog" aria-modal="true"></aside>
+<div id="toast" class="toast" role="status"></div>
+<a class="demo-switch" href="index.html">← 返回方案对比</a>
+<script>window.DEMO={}</script>
+<script src="data.js"></script>
+<script src="common.js"></script>
+</body></html>
