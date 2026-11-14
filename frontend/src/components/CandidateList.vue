@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { api, formatStars } from '../api'
 import { kindStyle } from '../categoryStyle'
-import { compareState, fromCandidate, inCompare, toggleCompare } from '../composables/compare'
+import { compareState, fromCandidate, inCompare, isComparing, toggleCompare } from '../composables/compare'
 import { meta } from '../composables/meta'
 import { toast } from '../composables/toast'
 import { addPending, bumpTasks, removePending } from '../composables/tasks'
@@ -109,12 +109,21 @@ watch(
 
 // AI 智能对比模式下，勾选框和整行点击都用来选「对比」（已收录的也能比）；否则用来选「加入本站」
 // v3.3.7：正在加入本站的行也能勾选对比（对比和加入是两套逻辑）
-const comparable = (c) => props.mode === 'search' && !!c.full_name && ['matched', 'existing', 'importing'].includes(c.state)
-const compareOn = computed(() => compareState.mode && props.mode === 'search')
+// 搜索添加的候选自带 full_name；长文识别的候选对应到的仓库在 match 里
+const repoOf = (c) => c.full_name || c.match?.full_name || ''
+const compareOn = computed(() => compareState.mode)
+const entryOf = (c) => fromCandidate(c.full_name ? c : { ...c, full_name: repoOf(c), stars: c.match?.stars ?? null, description: c.description || c.match?.description || '' })
+// v3.3.81 加入中的不能勾选对比；已经在进行中的对比里的，显示转圈、提示正在对比
+// 加入中和对比互不影响：加入中的条目照样可以勾选对比
+const comparing = (c) => !!repoOf(c) && ['matched', 'existing', 'importing'].includes(c.state) && isComparing(entryOf(c))
+const comparable = (c) => !!repoOf(c) && ['matched', 'existing', 'importing'].includes(c.state) && !comparing(c)
+const COMPARING_TIP = '正在对比中，完成后可在对比栏查看结果'
 
 function toggle(c) {
   if (compareOn.value) {
-    if (comparable(c)) toggleCompare(fromCandidate(c))
+    if (comparing(c)) return toast(COMPARING_TIP, 'info', 2600)
+    if (comparable(c)) toggleCompare(entryOf(c))
+    else if (tipOf(c)) toast(tipOf(c), 'info', 2600)
     return
   }
   // v3.1：点了不能勾选的条目，直接说明原因（原来只有鼠标悬停提示，手机上看不到）
@@ -242,14 +251,15 @@ async function doImport() {
         :key="c.i"
         v-reveal="c.i % 12"
         class="panel overflow-hidden transition-[background-color,box-shadow] duration-300"
-        :class="(compareOn ? comparable(c) && inCompare(fromCandidate(c)) : selected.has(c.i) && c.state === 'matched') ? 'bg-white/85 ring-2 ring-brand/40' : ''"
+        :class="(compareOn ? comparable(c) && inCompare(entryOf(c)) : selected.has(c.i) && c.state === 'matched') ? 'bg-white/85 ring-2 ring-brand/40' : ''"
       >
         <div class="flex gap-3 p-3" :class="(compareOn ? comparable(c) : c.state === 'matched' && !preview) ? 'cursor-pointer' : ''" @click="toggle(c)">
           <div class="flex w-7 shrink-0 flex-col items-center gap-1 pt-0.5">
+            <span v-if="compareOn && comparing(c)" class="cursor-help text-brand" :title="COMPARING_TIP" :aria-label="COMPARING_TIP" @click.stop="toast(COMPARING_TIP, 'info', 2600)"><Icon name="refresh" :size="16" class="animate-spin" /></span>
             <CheckBox
-              v-if="compareOn && comparable(c)"
+              v-else-if="compareOn && comparable(c)"
               tone="compare"
-              :checked="inCompare(fromCandidate(c))"
+              :checked="inCompare(entryOf(c))"
               :label="`对比 ${c.name}`"
               @toggle="toggle(c)"
             />
@@ -264,7 +274,7 @@ async function doImport() {
 
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-              <RouterLink v-if="c.state === 'existing' && c.existing_item_id" :to="itemLink(c.existing_item_id)" class="font-semibold break-all text-ink underline-offset-4 hover:text-brand hover:underline" @click.stop>{{ mode === 'search' && c.match ? repoLabel(c) : c.name }}</RouterLink>
+              <RouterLink v-if="c.state === 'existing' && c.existing_item_id" :to="itemLink(c.existing_item_id)" class="font-semibold break-all text-ink underline decoration-ink/35 underline-offset-4 hover:text-brand hover:decoration-brand" @click.stop>{{ mode === 'search' && c.match ? repoLabel(c) : c.name }}</RouterLink>
               <span v-else class="font-semibold break-all">{{ mode === 'search' && c.match ? repoLabel(c) : c.name }}</span>
               <span v-if="kindName(c.kind)" class="tag" :class="kindStyle(c.kind).cls">{{ kindName(c.kind) }}</span>
               <span v-if="mode === 'search' && c.stars != null" class="flex items-center gap-0.5 text-xs text-mute"><Icon name="star" :size="11" class="fill-amber-400 text-amber-400" />{{ formatStars(c.stars) }}</span>

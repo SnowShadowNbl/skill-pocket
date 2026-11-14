@@ -58,3 +58,36 @@ def test_slow_import_is_queued_then_polled(monkeypatch):
             break
         time.sleep(0.1)
     assert g["status"] == "imported" and g["import"]["errors"] == ["o/b：仓库不存在"]
+
+
+def test_import_marks_rows_importing_then_existing(monkeypatch):
+    """v3.3.81 加入中的行标成 importing（不能再勾选），加完后对应到条目的改成 existing 并带 existing_item_id。"""
+    c = login_client("upimp3@example.com")
+    seen = {}
+
+    def slow(db, picks, trig, user_id=None, review=False):
+        time.sleep(0.8)
+        return [], ["c"], []
+
+    monkeypatch.setattr(ingest, "import_picks", slow)
+    monkeypatch.setattr(ingest, "start_process_task", lambda *a, **k: None)
+    monkeypatch.setattr(uploads, "_existing_for", lambda db, fn, sub: 77 if fn == "o/c" else None)
+    monkeypatch.setattr(uploads, "IMPORT_WAIT", 0.1)
+    with SessionLocal() as db:
+        rec = Upload(image_path="uploads/x.png", status="recognized", user_id=_me(c), ai_result={"items": [
+            {"name": "c", "state": "matched", "match": {"full_name": "O/c"}, "sub_path": None},
+            {"name": "d", "state": "matched", "match": {"full_name": "o/d"}, "sub_path": None}]})
+        db.add(rec)
+        db.commit()
+        uid = rec.id
+    c.post(f"/api/uploads/{uid}/import", json={"picks": [{"full_name": "o/c", "name": "c"}]})
+    g = c.get(f"/api/uploads/{uid}").json()
+    assert [it["state"] for it in g["items"]] == ["importing", "matched"]
+    for _ in range(40):
+        g = c.get(f"/api/uploads/{uid}").json()
+        if g["status"] == "imported":
+            break
+        time.sleep(0.1)
+    assert g["items"][0]["state"] == "existing" and g["items"][0]["existing_item_id"] == 77
+    assert g["items"][1]["state"] == "matched"
+    assert g["import"]["resolved"] == [{"full_name": "o/c", "sub_path": None, "item_id": 77}]

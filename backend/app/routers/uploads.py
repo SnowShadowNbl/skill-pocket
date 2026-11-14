@@ -54,6 +54,21 @@ def _library_index(db: Session) -> dict[str, list[dict]]:
 _existing_for = ingest.existing_item_for
 
 
+def _pick_key(full_name: str, sub_path) -> tuple[str, str]:
+    return ((full_name or "").lower(), sub_path or "")
+
+
+def _mark_picks(items: list[dict], picks: list[dict], patch_for) -> list[dict]:
+    """v3.3.81 把识别结果里与这批 picks 对应的条目改状态（加入中 / 已收录），刷新页面或小程序轮询也能看到。"""
+    keys = {_pick_key(p["full_name"], p.get("sub_path")): p for p in picks}
+    out = []
+    for it in items:
+        m = it.get("match") or {}
+        k = _pick_key(m.get("full_name", ""), it.get("sub_path"))
+        out.append({**it, **patch_for(it, keys[k])} if m and k in keys and it.get("state") in ("matched", "importing") else it)
+    return out
+
+
 # ---------------------------------------------------------------- 后台对应
 
 def _save_item(upload_id: int, index: int, patch: dict) -> None:
@@ -211,9 +226,12 @@ def import_from_upload(upload_id: int, body: ImportIn, db: Session = Depends(get
     with _write_lock:
         db.refresh(rec)
         rec.status = "importing"
-        rec.ai_result = {k: v for k, v in (rec.ai_result or {}).items() if k != "import"}
+        data = {k: v for k, v in (rec.ai_result or {}).items() if k != "import"}
+        picks = [p.model_dump() for p in body.picks]
+        data["items"] = _mark_picks(data.get("items") or [], picks, lambda it, p: {"state": "importing"})
+        rec.ai_result = data
         db.commit()
-    t = threading.Thread(target=_run_import, args=(rec.id, [p.model_dump() for p in body.picks], me.id, review.needs_review(me)),
+    t = threading.Thread(target=_run_import, args=(rec.id, picks, me.id, review.needs_review(me)),
                          daemon=True)
     t.start()
     t.join(IMPORT_WAIT)
@@ -235,6 +253,9 @@ def _run_import(upload_id: int, picks: list[dict], user_id: int, needs_review: b
             except Exception as e:  # noqa: BLE001 —— 整批意外失败：记下原因，让前端能停下来提示
                 log.exception("upload %s import failed", upload_id)
                 errors = [f"加入失败：{e}"]
+            # 每个 pick 对应到的条目（新建的或本来就有的），前端据此把这一行改成「已收录」并能点开详情
+            for p in picks:
+                p["item_id"] = _existing_for(db, p["full_name"], p.get("sub_path"))
             for i in created:
                 db.add(UploadItem(upload_id=upload_id, item_id=i))
             db.commit()
@@ -244,8 +265,12 @@ def _run_import(upload_id: int, picks: list[dict], user_id: int, needs_review: b
             rec = db.get(Upload, upload_id)
             if rec is not None:
                 rec.status = "imported"
-                rec.ai_result = {**(rec.ai_result or {}),
-                                 "import": {"created": created, "skipped": skipped, "errors": errors, "task_id": task_id}}
+                resolved = [{"full_name": p["full_name"], "sub_path": p.get("sub_path"), "item_id": p.get("item_id")} for p in picks]
+                data = dict(rec.ai_result or {})
+                data["items"] = _mark_picks(data.get("items") or [], picks, lambda it, p: (
+                    {"state": "existing", "existing_item_id": p["item_id"]} if p.get("item_id") else {"state": "matched"}))
+                data["import"] = {"created": created, "skipped": skipped, "errors": errors, "task_id": task_id, "resolved": resolved}
+                rec.ai_result = data
                 db.commit()
             who = db.get(User, user_id)
         if created:

@@ -10,6 +10,7 @@ import { addPending, bumpTasks, removePending } from '../composables/tasks'
 import JoinBar from './JoinBar.vue'
 import Icon from './Icon.vue'
 import AiTag from './AiTag.vue'
+import { compareState, fromCandidate, inCompare, isComparing, toggleCompare } from '../composables/compare'
 
 const itemLink = useItemLink()
 const router = useRouter()
@@ -126,8 +127,26 @@ function onPaste(e) {
   if (f) send(f)
 }
 
+// AI 智能对比：打开后可勾选对应到仓库的条目（已收录的也可以）
+const compareOn = computed(() => compareState.mode)
+const compareEntry = (it) => fromCandidate({ name: it.name, full_name: it.match.full_name, sub_path: it.sub_path || '',
+  existing_item_id: it.state === 'existing' ? it.existing_item_id : null, stars: it.match.stars ?? null, description: it.match.description || '' })
+
+// v3.3.81 加入中 / 对比中的行：显示转圈、不能勾选，点一下或悬停提示原因
+// 加入中和对比互不影响：加入中的条目照样可以勾选对比
+const comparing = (it) => !!it.match?.full_name && ['matched', 'existing', 'importing'].includes(it.state) && isComparing(compareEntry(it))
+const comparable = (it) => !!it.match?.full_name && ['matched', 'existing', 'importing'].includes(it.state) && !comparing(it)
+const busyTip = (it) => (it.state === 'importing' ? '正在加入本站，加好后会变成「已收录」' : comparing(it) ? '正在对比中，完成后可在对比栏查看结果' : '')
+
 function toggle(i) {
-  if (items.value[i].state !== 'matched') return
+  const it = items.value[i]
+  const blocked = compareOn.value ? comparing(it) : busyTip(it)
+  if (blocked) return toast(compareOn.value ? '正在对比中，完成后可在对比栏查看结果' : busyTip(it), 'info', 2600)
+  if (compareOn.value) {
+    if (comparable(it)) toggleCompare(compareEntry(it))
+    return
+  }
+  if (it.state !== 'matched') return
   const s = new Set(selected.value)
   s.has(i) ? s.delete(i) : s.add(i)
   selected.value = s
@@ -176,6 +195,18 @@ async function waitImport(id) {
   throw new Error('加入时间较长，稍后可在「我的 → 提交」里查看结果')
 }
 
+// 加入完成：对应到条目的行改成「已收录」（能点开详情），没加进去的恢复成可加入
+function settleJoining(idx, resolved) {
+  const key = (fn, sub) => `${(fn || '').toLowerCase()}/${sub || ''}`
+  const ids = new Map(resolved.map((r) => [key(r.full_name, r.sub_path), r.item_id]))
+  idx.forEach((i) => {
+    const it = items.value[i]
+    if (!it || it.state !== 'importing') return
+    const id = ids.get(key(it.match?.full_name, it.sub_path))
+    Object.assign(it, id ? { state: 'existing', existing_item_id: id } : { state: 'matched' })
+  })
+}
+
 async function doImport() {
   const picks = [...selected.value]
     .filter((i) => items.value[i]?.state === 'matched')
@@ -184,6 +215,8 @@ async function doImport() {
   importing.value = true
   // v3.3.26 点了就清空勾选、收起加入栏，进度放进右侧任务浮窗；失败时恢复勾选方便重试
   const keep = new Set(selected.value)
+  const joining = [...selected.value].filter((i) => items.value[i]?.state === 'matched')
+  joining.forEach((i) => (items.value[i].state = 'importing'))
   selected.value = new Set()
   const pid = addPending(`加入 ${picks.length} 个条目`, `正在加入 ${picks.length} 个，AI 准备分析…`)
   try {
@@ -193,6 +226,7 @@ async function doImport() {
       toast(`正在加入 ${picks.length} 个，加好后会提示你`, 'info', 3000)
       data = await waitImport(result.value.id)
     }
+    settleJoining(joining, data.resolved || [])
     data.errors.forEach((m) => toast(m, 'error', 4000))
     if (data.skipped.length) toast(`${data.skipped.length} 个已在库中，已跳过`, 'info', 3000)
     if (data.created.length) {
@@ -200,6 +234,7 @@ async function doImport() {
       if (data.created.length === 1) router.push(itemLink(data.created[0]))
     }
   } catch (e) {
+    joining.forEach((i) => items.value[i]?.state === 'importing' && (items.value[i].state = 'matched'))
     selected.value = new Set([...keep, ...selected.value])
     if (!isCancelled(e)) toast(e.message, 'error')
   } finally {
@@ -311,7 +346,10 @@ onBeforeUnmount(() => {
 
           <p v-if="!counts.all" class="panel mt-3 px-5 py-8 text-center text-sm text-ink-2">截图里没有识别到 Skill / 模型 / 仓库</p>
 
-          <div v-if="counts.all > 1 && selectable.length" class="mt-2 flex items-center gap-2 px-1 text-[13px] text-ink-2">
+          <p v-if="compareOn && counts.all" class="mt-2 flex items-center gap-1.5 px-1 text-[13px] text-brand">
+            <span class="tag bg-brand text-white">AI 智能对比</span>勾选要对比的仓库（已收录的也可以），在底部对比栏开始对比
+          </p>
+          <div v-else-if="counts.all > 1 && selectable.length" class="mt-2 flex items-center gap-2 px-1 text-[13px] text-ink-2">
             <div class="flex cursor-pointer items-center gap-2" @click="toggleAll">
               <CheckBox :checked="allPicked" label="全选可加入的" @toggle="toggleAll" />全选可加入的（{{ selectable.length }}）
             </div>
@@ -324,17 +362,25 @@ onBeforeUnmount(() => {
               :key="i"
               v-reveal="i"
               class="panel overflow-hidden transition-[background-color,box-shadow] duration-300"
-              :class="selected.has(i) && it.state === 'matched' ? 'bg-white/85 ring-2 ring-brand/40' : ''"
+              :class="(compareOn ? comparable(it) && inCompare(compareEntry(it)) : selected.has(i) && it.state === 'matched') ? 'bg-white/85 ring-2 ring-brand/40' : ''"
             >
               <div
                 class="flex gap-3 p-3"
-                :class="it.state === 'matched' ? 'cursor-pointer' : ''"
+                :class="(compareOn ? comparable(it) : it.state === 'matched') ? 'cursor-pointer' : ''"
                 @click="toggle(i)"
               >
                 <!-- 勾选 / 状态 -->
                 <div class="flex w-7 shrink-0 flex-col items-center gap-1.5 pt-0.5">
-                  <CheckBox v-if="it.state === 'matched'" :checked="selected.has(i)" :label="`选择 ${it.name}`" @toggle="toggle(i)" />
+                  <CheckBox
+                    v-if="compareOn && comparable(it)"
+                    tone="compare"
+                    :checked="inCompare(compareEntry(it))"
+                    :label="`对比 ${it.name}`"
+                    @toggle="toggle(i)"
+                  />
+                  <CheckBox v-else-if="!compareOn && it.state === 'matched'" :checked="selected.has(i)" :label="`选择 ${it.name}`" @toggle="toggle(i)" />
                   <span v-else-if="it.state === 'resolving'" class="text-brand"><Icon name="refresh" :size="16" class="animate-spin" /></span>
+                  <span v-else-if="busyTip(it)" class="cursor-help text-brand" :title="busyTip(it)" :aria-label="busyTip(it)" @click.stop="toast(busyTip(it), 'info', 2600)"><Icon name="refresh" :size="16" class="animate-spin" /></span>
                   <span v-else-if="it.state === 'existing'" class="text-ok"><Icon name="check" :size="18" /></span>
                   <span v-else class="text-warn"><Icon name="alert" :size="17" /></span>
                   <span v-if="it.rank" class="text-[11px] font-bold text-mute tabular-nums">#{{ it.rank }}</span>
@@ -342,7 +388,13 @@ onBeforeUnmount(() => {
 
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                    <span class="font-semibold break-all">{{ it.name }}</span>
+                    <RouterLink
+                      v-if="it.state === 'existing' && it.existing_item_id"
+                      :to="itemLink(it.existing_item_id)"
+                      class="font-semibold break-all text-ink underline decoration-ink/35 underline-offset-4 hover:text-brand hover:decoration-brand"
+                      @click.stop
+                    >{{ it.name }}</RouterLink>
+                    <span v-else class="font-semibold break-all">{{ it.name }}</span>
                     <span class="tag bg-brand-soft text-brand">{{ KIND[it.kind] }}</span>
                     <span v-if="it.stars" class="text-xs text-mute">截图 {{ formatStars(it.stars) }}</span>
                   </div>
@@ -375,7 +427,9 @@ onBeforeUnmount(() => {
 
                   <!-- 操作 -->
                   <div v-if="it.state !== 'resolving'" class="mt-2 flex flex-wrap items-center gap-2 text-[12.5px]" @click.stop>
-                    <RouterLink v-if="it.state === 'existing'" :to="itemLink(it.existing_item_id)" class="tag cursor-pointer bg-ok-soft text-ok">已收录 · 查看</RouterLink>
+                    <RouterLink v-if="it.state === 'existing' && it.existing_item_id" :to="itemLink(it.existing_item_id)" class="tag cursor-pointer bg-ok-soft text-ok">已收录 · 查看</RouterLink>
+                    <span v-else-if="it.state === 'existing'" class="tag bg-ok-soft text-ok">已收录</span>
+                    <span v-else-if="it.state === 'importing'" class="tag bg-brand-soft text-brand">加入中…</span>
                     <button class="cursor-pointer text-brand hover:underline" @click="startSearch(i)">
                       {{ it.state === 'unmatched' ? '手动搜索' : it.state === 'existing' ? '不是同一个？' : '对应错了？换一个' }}
                     </button>
@@ -405,7 +459,7 @@ onBeforeUnmount(() => {
           <p v-if="counts.all && !visible.length" class="mt-3 text-center text-sm text-mute">这个分类下没有条目</p>
 
           <!-- v3.3.26 统一的加入栏：只在有勾选时出现 -->
-          <JoinBar :show="phase === 'done'" :count="pickedCount" :note="counts.existing ? `${counts.existing} 个已在库中会跳过` : ''" :posting="importing" @join="doImport" />
+          <JoinBar :show="phase === 'done' && !compareOn" :count="pickedCount" :note="counts.existing ? `${counts.existing} 个已在库中会跳过` : ''" :posting="importing" @join="doImport" />
         </template>
       </section>
     </div>

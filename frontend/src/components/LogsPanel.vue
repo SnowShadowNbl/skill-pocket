@@ -155,7 +155,7 @@ onMounted(() => load())
           <span class="grid h-8 w-8 shrink-0 place-items-center rounded-xl" :class="LEVEL[r.level][1]"><Icon :name="LEVEL[r.level][2]" :size="16" /></span>
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <RouterLink v-if="r.item_id" :to="itemLink(r.item_id)" class="cursor-pointer font-semibold hover:text-brand">{{ r.item_name || '（未命名）' }}</RouterLink>
+              <RouterLink v-if="r.item_id" :to="itemLink(r.item_id)" class="cursor-pointer font-semibold underline decoration-ink/35 underline-offset-4 hover:text-brand hover:decoration-brand">{{ r.item_name || '（未命名）' }}</RouterLink>
               <span v-else class="font-semibold">{{ r.item_name || r.repo || '—' }}</span>
               <span class="tag" :class="r.source === 'auto' ? 'bg-ok-soft text-ok' : 'bg-brand-soft text-brand'">{{ r.source === 'auto' ? '系统' : '人工' }}</span>
               <span class="tag bg-white/70 text-ink-2">{{ r.trigger_label }}</span>
@@ -203,7 +203,7 @@ onMounted(() => load())
                 <Icon :name="ITEM_ICON[i.status]?.[0]" :size="15" class="mt-0.5 shrink-0" :class="ITEM_ICON[i.status]?.[1]" />
                 <span class="w-6 shrink-0 text-right text-mute tabular-nums">{{ i.seq }}</span>
                 <div class="min-w-0 flex-1">
-                  <RouterLink v-if="i.item_id" :to="itemLink(i.item_id)" class="cursor-pointer font-medium hover:text-brand">{{ i.name }}</RouterLink>
+                  <RouterLink v-if="i.item_id" :to="itemLink(i.item_id)" class="cursor-pointer font-medium underline decoration-ink/35 underline-offset-4 hover:text-brand hover:decoration-brand">{{ i.name }}</RouterLink>
                   <span v-else class="font-medium">{{ i.name }}</span>
                   <span v-if="i.status === 'running'" class="ml-1 text-brand">· {{ i.stage_label }}</span>
                   <span v-else-if="i.status === 'failed'" class="ml-1 text-danger">· 失败于「{{ i.stage_label }}」</span>

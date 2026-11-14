@@ -71,7 +71,8 @@ function view(r) {
 
 function close() {
   compareState.open = false
-  if (!list.value.length) setCompareMode(false)
+  // 刚开始对比时对比栏是空的：有进行中的对比就不退出对比模式
+  if (!list.value.length && !compareState.runs.some((r) => r.status === 'running')) setCompareMode(false)
 }
 </script>
 

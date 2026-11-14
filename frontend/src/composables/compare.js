@@ -79,10 +79,26 @@ export function fromItem(it) {
 
 /** 外站仓库（GitHub 搜索结果）→ 对比栏里的一项；其实已收录的按本站条目算 */
 export function fromCandidate(c) {
-  const base = { name: c.name || c.full_name, cover_url: '', stars: c.stars ?? null, summary: c.description || c.summary || '', repo: c.full_name }
-  if (c.existing_item_id) return { ...base, key: `i:${c.existing_item_id}`, item_id: c.existing_item_id }
   const sub = c.sub_path || ''
+  // 仓库标识（repo_id）一直带着：勾选后状态可能变（加入中 → 已收录），key 会从仓库变成条目号，靠它仍能认出是同一个
+  const base = { name: c.name || c.full_name, cover_url: '', stars: c.stars ?? null, summary: c.description || c.summary || '', repo: c.full_name,
+    repo_id: `${(c.full_name || '').toLowerCase()}/${sub}` }
+  if (c.existing_item_id) return { ...base, key: `i:${c.existing_item_id}`, item_id: c.existing_item_id }
   return { ...base, key: `r:${c.full_name.toLowerCase()}/${sub}`, full_name: c.full_name, sub_path: sub, external: true }
+}
+
+/** v3.3.81 已经发起、还在进行中的对比里的条目：列表上显示转圈，不能再勾选 */
+export function isComparing(entry) {
+  return compareState.runs.some((r) => r.status === 'running' && (r.picked || []).some((x) => sameEntry(x, entry)))
+}
+
+/** 是不是同一个条目：key 相同，或条目号相同，或仓库 + 子目录相同（同仓库不同子目录的 Skill 不算） */
+function sameEntry(a, b) {
+  if (a.key === b.key) return true
+  if (a.item_id && a.item_id === b.item_id) return true
+  const ra = a.repo_id || (a.full_name ? `${a.full_name.toLowerCase()}/${a.sub_path || ''}` : '')
+  const rb = b.repo_id || (b.full_name ? `${b.full_name.toLowerCase()}/${b.sub_path || ''}` : '')
+  return !!ra && ra === rb
 }
 
 export function inCompare(entry) {

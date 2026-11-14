@@ -392,7 +392,7 @@ watch(
                 <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-mute">
                   <b class="text-[13.5px] font-semibold text-ink">{{ me.nickname }}</b>
                   <span>评论了</span>
-                  <RouterLink :to="itemLink(c.item_id)" class="min-w-0 truncate font-medium text-brand hover:underline">{{ c.item_name }}</RouterLink>
+                  <RouterLink :to="itemLink(c.item_id)" class="min-w-0 truncate font-medium text-brand underline underline-offset-4">{{ c.item_name }}</RouterLink>
                   <span v-if="c.input_type === 'voice'" class="tag bg-brand-soft text-brand"><Icon name="mic" :size="12" />语音</span>
                   <span v-if="c.status === 'pending'" class="tag bg-warn-soft text-warn"><Icon name="clock" :size="12" />审核中</span>
                   <time class="ml-auto">{{ formatTime(c.created_at) }}</time>
