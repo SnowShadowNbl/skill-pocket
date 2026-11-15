@@ -42,7 +42,7 @@ const low = computed(() => q.value && !q.value.unlimited && !q.value.needs_wecha
             今天用了 <b class="tabular-nums">{{ fmt(q.used_today) }}</b> · 近 30 天 <b class="tabular-nums">{{ fmt(q.used_30d) }}</b>
           </p>
           <p v-if="q.unlimited" class="mt-2 text-[12.5px] text-ok">管理员账号不受额度限制，用量照常记录</p>
-          <button v-else-if="q.needs_wechat" class="btn-primary btn-sm mt-3 w-full justify-center sm:w-auto" @click="openBindWechat"><Icon name="message" :size="15" />绑定微信领取 {{ wan(q.free_amount) }} 额度</button>
+          <button v-else-if="q.needs_wechat" class="btn-primary btn-sm mt-3 w-full justify-center sm:w-auto" @click="openBindWechat"><Icon name="message" :size="15" />绑定微信领取 {{ wan(q.free_amount) }}额度</button>
           <p v-else-if="q.balance <= 0" class="mt-2 flex items-start gap-1.5 text-[12.5px] text-danger"><Icon name="alert" :size="14" class="mt-0.5 shrink-0" />额度已用完，暂时不能发起新的 AI 操作，可以联系管理员补充额度。</p>
           <p v-else-if="low" class="mt-2 text-[12.5px] text-warn">额度快用完了，需要时可以联系管理员补充</p>
           <p v-if="!q.unlimited && !q.needs_wechat && q.balance > 0 && q.estimates?.length" class="mt-2 text-[12px] text-mute">约可{{ q.estimates.slice(0, 3).map((e) => `${e.label} ${e.times.toLocaleString()} 次`).join(' · ') }}</p>

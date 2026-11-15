@@ -14,6 +14,7 @@ import OtpInput from '../components/OtpInput.vue'
 import UserAvatar, { AVATAR_KEYS } from '../components/UserAvatar.vue'
 import { authState, clearSession, isAdminUser, requireLogin, setSession } from '../composables/auth'
 import { meta } from '../composables/meta'
+import { quotaPopup } from '../composables/quota'
 import WxQrPanel from '../components/WxQrPanel.vue'
 import { confirmDialog } from '../composables/dialog'
 import { codeLabel, codeLeft, requestCode } from '../composables/codeCooldown'
@@ -78,8 +79,16 @@ async function loadTab() {
 
 // ---- v3.3.9 微信绑定 / 解绑、只有微信的账号绑定邮箱（必要时合并）----
 const emailValid = (v) => /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(v || '')
+// v3.3.100 待领取免费额度时，微信卡片上写明能领多少
+const freeWan = computed(() => {
+  const n = meta.data?.free_quota || 0
+  return n >= 10000 && n % 10000 === 0 ? `${n / 10000} 万` : n.toLocaleString()
+})
 function onWechatBound(r) {
+  const claimed = authState.user?.needs_wechat
   if (r.user) authState.user = r.user
+  quotaPopup.boundAt = Date.now() // 额度区刷新
+  if (claimed && r.user && !r.user.needs_wechat) setTimeout(() => toast(`已领取 ${freeWan.value}额度`, 'success', 3200), 300)
   dlg.value = ''
   toast(r.result?.status === 'merged' ? '已绑定微信，并合并了小程序里的数据' : '已绑定微信', 'success', 3000)
   api('/api/me/stats').then((s) => (stats.value = s)).catch(() => {})
@@ -433,7 +442,7 @@ watch(
             <span class="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-2xl" :class="me.wechat_bound ? 'bg-ok-soft text-ok' : 'bg-brand-soft text-brand'"><Icon name="message" :size="20" /></span>
             <span class="min-w-0 flex-1 text-left">
               <b class="block text-[15px] font-semibold">微信</b>
-              <span class="mt-0.5 block truncate text-[12.5px] text-mute">{{ me.wechat_bound ? '已绑定，可以用微信扫码或小程序登录' : '绑定后可以用微信扫码登录、在小程序里同步数据' }}</span>
+              <span class="mt-0.5 block truncate text-[12.5px] text-mute">{{ me.wechat_bound ? '已绑定，可以用微信扫码或小程序登录' : me.needs_wechat ? `绑定后领取 ${freeWan}额度，还能用微信扫码登录` : '绑定后可以用微信扫码登录、在小程序里同步数据' }}</span>
             </span>
             <button v-if="me.wechat_bound" class="btn-ghost btn-sm shrink-0" :disabled="!me.email && !me.username" :title="!me.email && !me.username ? '这个账号只能用微信登录，先绑定邮箱才能解绑' : ''" @click="unbindWechat">解绑</button>
             <button v-else class="btn-primary btn-sm shrink-0" @click="dlg = 'wechat'">绑定微信</button>

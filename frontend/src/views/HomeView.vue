@@ -21,6 +21,7 @@ import { bannerDismissed, dismissBanner, homeConfig, loadHomeConfig } from '../c
 import { rememberSearch } from '../composables/searchHistory'
 import { isSubscribed, loadSubs, noteState, toggleSub } from '../composables/notifications'
 import SearchAssist from '../components/SearchAssist.vue'
+import BindTipBar from '../components/BindTipBar.vue'
 import { authState, initAuth, isAdminUser, requireLogin } from '../composables/auth'
 import { meta as metaStore, loadMeta as fetchMeta } from '../composables/meta'
 import { goCollect, homeSignal } from '../composables/collect'
@@ -732,6 +733,8 @@ onBeforeUnmount(() => {
         </form>
           <SearchAssist v-if="assistOpen && scope === 'site'" :q="keyword" @pick="pickSuggestion" @open="openSuggestion" />
         </div>
+        <!-- v3.3.100 只有邮箱、还没领免费额度：提示绑定微信 -->
+        <BindTipBar class="mt-2.5" />
       </div>
     </section>
 

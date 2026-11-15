@@ -34,7 +34,7 @@ function onBound(r) {
   quotaPopup.boundAt = Date.now()
   settleBind(true) // 先放行等待中的请求（自动重发刚才的操作），再关窗
   closeQuotaPopup()
-  toast(`已绑定微信，领取了 ${free.value} 额度`, 'success', 3200)
+  toast(`已绑定微信，领取了 ${free.value}额度`, 'success', 3200)
 }
 </script>
 
@@ -56,9 +56,9 @@ function onBound(r) {
               <Icon :name="bind ? 'message' : 'alert'" :size="19" />
             </span>
             <div class="min-w-0 flex-1 pt-1">
-              <h2 id="quota-title" class="text-[17px] font-bold">{{ bind ? `绑定微信领取 ${free} 额度` : '额度已用完' }}</h2>
+              <h2 id="quota-title" class="text-[17px] font-bold">{{ bind ? `绑定微信领取 ${free}额度` : '额度已用完' }}</h2>
               <p class="mt-1.5 text-sm leading-relaxed text-ink-2">
-                {{ bind ? '绑定后即可继续使用这个功能，也能在小程序里同步收藏。' : '暂时不能继续使用这个功能，联系管理员补充额度后即可继续。' }}
+                {{ bind ? (quotaPopup.reason === 'tip' ? '绑定后即可领取，还能用微信扫码登录、在小程序里同步收藏。' : '绑定后即可继续使用这个功能，也能在小程序里同步收藏。') : '暂时不能继续使用这个功能，联系管理员补充额度后即可继续。' }}
               </p>
             </div>
           </div>

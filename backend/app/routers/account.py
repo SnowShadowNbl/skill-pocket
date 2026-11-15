@@ -17,7 +17,7 @@ from ..config import settings
 from ..db import get_db, utcnow
 from ..models import AuthSession, Category, Comment, ItemReview, EmailCode, EmailLog, FavDimension, Favorite, Item, User
 from ..schemas import item_card, public_user  # noqa: F401
-from ..services import activity, geo, judge, mailer, users, visits
+from ..services import activity, billing, geo, judge, mailer, users, visits
 from ..services.client import client_of
 
 router = APIRouter(prefix="/api", tags=["account"])
@@ -32,7 +32,9 @@ def user_out(u: User) -> dict:
     out = {"id": u.id, "email": u.email, "username": u.username, "nickname": u.nickname, "avatar": u.avatar,
            "role": u.role, "has_password": bool(u.password_hash), "created_at": u.created_at,
            "needs_setup": auth.admin_needs_setup(u),
-           "wechat_bound": bool(u.wx_openid), "has_email": bool(u.email), "prefs": u.prefs or {}}
+           "wechat_bound": bool(u.wx_openid), "has_email": bool(u.email), "prefs": u.prefs or {},
+           # v3.3.100 只有邮箱、还没领过免费额度：网页 / 小程序据此提示「绑定微信领取额度」
+           "needs_wechat": billing.needs_wechat(u)}
     if u.role in auth.STAFF_ROLES:  # v3.3.55 管理员：角色、各后台模块的读写权限、能力
         from ..services import permissions
 

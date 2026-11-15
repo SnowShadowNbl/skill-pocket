@@ -10,6 +10,7 @@ import LoginModal from './components/LoginModal.vue'
 import MiniProgramQr from './components/MiniProgramQr.vue'
 import ModeSwitch from './components/ModeSwitch.vue'
 import { homeMode } from './composables/homeMode'
+import './composables/bindTip' // v3.3.100 纯邮箱账号登录后提示绑定微信领额度
 import PrivacyNotice from './components/PrivacyNotice.vue'
 import CompareTray from './components/CompareTray.vue'
 import FeedbackModal from './components/FeedbackModal.vue'

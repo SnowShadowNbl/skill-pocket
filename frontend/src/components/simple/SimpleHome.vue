@@ -16,6 +16,7 @@ import CompareModeToggle from '../CompareModeToggle.vue'
 import ErrorNote from '../ErrorNote.vue'
 import Icon from '../Icon.vue'
 import ItemCard from '../ItemCard.vue'
+import BindTipBar from '../BindTipBar.vue'
 import JoinBar from '../JoinBar.vue'
 import GhFlow from './GhFlow.vue'
 
@@ -674,6 +675,9 @@ narrowMq.addEventListener?.('change', (e) => (narrow.value = e.matches))
           </div>
         </Transition>
       </div>
+
+      <!-- v3.3.100 只有邮箱、还没领免费额度：提示绑定微信 -->
+      <div :class="phase === 'idle' ? 'mt-3' : 'mx-auto mt-2.5 max-w-[920px]'"><BindTipBar /></div>
 
       <!-- 空态插画：口袋与漂浮卡片、玻璃小方块，点一下有回应；搜索后淡出 -->
       <div v-if="phase === 'idle'" class="sh-art relative mx-auto mt-6 h-[300px] max-w-[560px] md:mt-10 md:h-[320px]" aria-hidden="true">

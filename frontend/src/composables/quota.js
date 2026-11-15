@@ -5,7 +5,7 @@ import { reactive } from 'vue'
 // v3.3.91 只有邮箱的账号用 AI 返回 wechat_bind_required：同一个窗口改成「绑定微信领取免费额度」
 export const QUOTA_EXHAUSTED = 'quota_exhausted'
 export const WECHAT_BIND_REQUIRED = 'wechat_bind_required'
-export const quotaPopup = reactive({ open: false, kind: QUOTA_EXHAUSTED, message: '', at: 0, boundAt: 0 })
+export const quotaPopup = reactive({ open: false, kind: QUOTA_EXHAUSTED, message: '', at: 0, boundAt: 0, reason: '' }) // reason: 'tip' 主动提示（不是被拦下）
 
 export const isQuotaCode = (code) => code === QUOTA_EXHAUSTED || code === WECHAT_BIND_REQUIRED
 
@@ -23,7 +23,8 @@ export function showQuotaExhausted(message = '', code = QUOTA_EXHAUSTED) {
 }
 
 /** 「我的」里主动点「绑定微信领取额度」：不受 30 秒限制 */
-export function openBindWechat() {
+export function openBindWechat(reason = '') {
+  quotaPopup.reason = reason
   quotaPopup.kind = WECHAT_BIND_REQUIRED
   quotaPopup.message = ''
   quotaPopup.at = Date.now()
@@ -46,7 +47,7 @@ let bindWaiters = []
 
 export function waitForBind(message = '') {
   // 每次都打开：这是用户刚做的操作，不受 30 秒限制
-  Object.assign(quotaPopup, { kind: WECHAT_BIND_REQUIRED, message, at: Date.now(), open: true })
+  Object.assign(quotaPopup, { kind: WECHAT_BIND_REQUIRED, message, at: Date.now(), open: true, reason: '' })
   return new Promise((resolve) => bindWaiters.push(resolve))
 }
 

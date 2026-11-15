@@ -129,3 +129,15 @@ def test_mp_bind_wechat_endpoint(monkeypatch):
         s.add(User(email="owner94@example.com", nickname="别人", role="user", status="active", wx_openid="oid-o94"))
         s.commit()
     assert c3.post("/api/auth/me/wechat", json={"code": "o94"}).status_code == 409
+
+
+def test_user_out_has_needs_wechat():
+    c = login_client("tip100@example.com", wechat=False)
+    assert c.get("/api/auth/me").json()["user"]["needs_wechat"] is True
+    w = login_client("tip100w@example.com")
+    assert w.get("/api/auth/me").json()["user"]["needs_wechat"] is False
+    legacy = login_client("tip100l@example.com", wechat=False)
+    with SessionLocal() as s:
+        s.scalar(select(User).where(User.email == "tip100l@example.com")).quota_balance = 100
+        s.commit()
+    assert legacy.get("/api/auth/me").json()["user"]["needs_wechat"] is False  # 以前领过的老邮箱账号不提示
