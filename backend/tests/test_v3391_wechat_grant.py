@@ -2,6 +2,9 @@
 
 from sqlalchemy import select
 
+import pytest
+
+from app.config import settings
 from app.db import Base, SessionLocal, engine
 from app.main import ensure_admin
 from app.models import QuotaLedger, QuotaWxGrant, User
@@ -10,6 +13,13 @@ from app.services import billing, wechat
 from conftest import login_client
 
 COMPARE = {"entries": [{"full_name": "a/b"}, {"full_name": "c/d"}]}
+
+
+@pytest.fixture(autouse=True)
+def _wechat_configured(monkeypatch):
+    """这组测试默认站点配了微信小程序（线上的情况）；没配的情况单独测"""
+    monkeypatch.setattr(settings, "wx_appid", "wx-test")
+    monkeypatch.setattr(settings, "wx_secret", "secret-test")
 
 
 def setup_module():
@@ -141,3 +151,15 @@ def test_user_out_has_needs_wechat():
         s.scalar(select(User).where(User.email == "tip100l@example.com")).quota_balance = 100
         s.commit()
     assert legacy.get("/api/auth/me").json()["user"]["needs_wechat"] is False  # 以前领过的老邮箱账号不提示
+
+
+def test_site_without_wechat_falls_back_to_direct_grant(monkeypatch):
+    """v3.3.102 自部署站点没配微信：纯邮箱账号第一次用 AI 直接发免费额度，不提示绑定"""
+    monkeypatch.setattr(settings, "wx_appid", "")
+    monkeypatch.setattr(settings, "wx_secret", "")
+    c = login_client("nowx102@example.com", wechat=False)
+    assert c.get("/api/auth/me").json()["user"]["needs_wechat"] is False
+    assert c.post("/api/compare", json=COMPARE).status_code != 402
+    q = c.get("/api/auth/me/quota").json()
+    assert q["needs_wechat"] is False and q["balance"] == 500_000
+    assert _user("nowx102@example.com").quota_balance == 500_000

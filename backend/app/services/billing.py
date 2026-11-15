@@ -112,9 +112,16 @@ def wx_keys(user: User) -> list[str]:
     return [k for k in (user.wx_openid, user.wx_unionid) if k]
 
 
+def wechat_required() -> bool:
+    """v3.3.102 站点配了微信小程序登录，免费额度才要求绑定微信；没配（多为自部署）退回原规则：第一次用 AI 直接发。"""
+    from . import wechat
+
+    return wechat.ready()
+
+
 def needs_wechat(user: User) -> bool:
-    """还没领过免费额度、也没绑定微信的普通账号：要先绑定微信。"""
-    return user.quota_balance is None and user.role not in STAFF and not user.wx_openid
+    """还没领过免费额度、也没绑定微信的普通账号：要先绑定微信（站点没配微信时不要求）。"""
+    return user.quota_balance is None and user.role not in STAFF and not user.wx_openid and wechat_required()
 
 
 def _grant_once(db: Session, user_id: int) -> bool:
@@ -125,7 +132,7 @@ def _grant_once(db: Session, user_id: int) -> bool:
         return False
     staff = user.role in STAFF
     keys = wx_keys(user)
-    if not staff and not keys:
+    if not staff and not keys and wechat_required():
         return False
     taken = bool(keys) and db.scalar(select(func.count()).select_from(QuotaWxGrant).where(QuotaWxGrant.wx_key.in_(keys)))
     amount = 0 if taken and not staff else default_free(db)
