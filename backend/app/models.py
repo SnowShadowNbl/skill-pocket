@@ -264,6 +264,10 @@ class AiCall(Base):
     # v2.6：由哪个账号的操作触发（AI 对比、搜索添加、截图识别、新增条目的提炼）；系统任务为空
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    # v3.3.89 真实成本快照（调用当时的单价）：按最高价 / 按实际时段；缓存命中的输入 token
+    cache_hit_tokens: Mapped[int | None] = mapped_column(Integer)
+    cost_max_yuan: Mapped[float | None] = mapped_column(Float)
+    cost_actual_yuan: Mapped[float | None] = mapped_column(Float)
 
 
 # ---- 批次任务与入库日志 ----
@@ -425,6 +429,16 @@ class CacheEntry(Base):
     key: Mapped[str] = mapped_column(String(200), primary_key=True)
     value: Mapped[dict] = mapped_column(JSON, default=dict)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+
+
+class QuotaWxGrant(Base):
+    """v3.3.91 免费额度按微信发放：领过的 openid / unionid 记在这里，同一个微信换账号（解绑再绑、重新注册）不再重复发。"""
+
+    __tablename__ = "quota_wx_grants"
+
+    wx_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class AppMeta(Base):

@@ -10,15 +10,16 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import require_admin
+from ..auth import client_ip, require_admin
 from ..config import settings
 from ..db import get_db, utcnow
 from ..models import AiCall, QuotaDaily, QuotaLedger, User
-from ..services import billing, users
+from ..services import activity, billing, pricing, users
 from ..services.resources import EMB, PURPOSES
 
 router = APIRouter(prefix="/api/admin/ai", tags=["admin-ai"], dependencies=[Depends(require_admin)])
@@ -26,23 +27,13 @@ CN = ZoneInfo("Asia/Shanghai")
 PURPOSE_LABELS = {**PURPOSES, EMB: "语义向量"}
 
 
-def prices() -> dict[str, tuple[float, float]]:
-    out: dict[str, tuple[float, float]] = {}
-    try:
-        for k, v in (json.loads(settings.ai_prices or "{}") or {}).items():
-            out[k] = (float(v[0]), float(v[1]))
-    except (ValueError, TypeError, IndexError):
-        pass
-    if settings.embedding_model and settings.embedding_model not in out:
-        out[settings.embedding_model] = (settings.embedding_price_per_1k_tokens * 1000, 0.0)
-    return out
-
-
-def _cost(model: str, tin: int, tout: int, table: dict) -> float | None:
-    p = table.get(model)
-    if p is None:
-        return None
-    return (tin or 0) / 1e6 * p[0] + (tout or 0) / 1e6 * p[1]
+def _cost(model: str, tin: int, tout: int, hit: int | None, at, stored_max, stored_actual, basis: str, table: dict) -> float | None:
+    """v3.3.89 有调用当时的成本快照就用快照；老记录（没有快照）按现在的单价表算。"""
+    stored = stored_max if basis == "max" else stored_actual
+    if stored is not None:
+        return stored
+    c = pricing.cost(model, tin, tout, hit, at, table)
+    return c[0] if basis == "max" else c[1]
 
 
 def _acc() -> dict:
@@ -69,20 +60,21 @@ def _fin(a: dict) -> dict:
 
 @router.get("/usage")
 def usage(days: int = Query(30, ge=1, le=365), group: str = Query("purpose", pattern="^(purpose|model|user|day)$"),
-          user_id: int | None = None, purpose: str = "", model: str = "", db: Session = Depends(get_db)):
+          user_id: int | None = None, purpose: str = "", model: str = "", basis: str = Query("max", pattern="^(max|actual)$"),
+          db: Session = Depends(get_db)):
     since = (datetime.now(CN) - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
     stmt = select(AiCall.purpose, AiCall.model, AiCall.user_id, AiCall.tokens_in, AiCall.tokens_out, AiCall.latency_ms, AiCall.ok,
-                  AiCall.created_at).where(AiCall.created_at >= since)
+                  AiCall.created_at, AiCall.cache_hit_tokens, AiCall.cost_max_yuan, AiCall.cost_actual_yuan).where(AiCall.created_at >= since)
     if user_id:
         stmt = stmt.where(AiCall.user_id == user_id)
     if purpose:
         stmt = stmt.where(AiCall.purpose == purpose)
     if model:
         stmt = stmt.where(AiCall.model == model)
-    table = prices()
+    table = pricing.table()
     total, groups, series = _acc(), defaultdict(_acc), defaultdict(_acc)
-    for p, m, uid, tin, tout, lat, ok, at in db.execute(stmt).all():
-        c = _cost(m, tin, tout, table)
+    for p, m, uid, tin, tout, lat, ok, at, hit, c_max, c_act in db.execute(stmt).all():
+        c = _cost(m, tin, tout, hit, at, c_max, c_act, basis, table)
         day = at.astimezone(CN).strftime("%Y-%m-%d")
         key = {"purpose": p, "model": m, "user": uid or 0, "day": day}[group]
         for a in (total, groups[key], series[day]):
@@ -103,7 +95,28 @@ def usage(days: int = Query(30, ge=1, le=365), group: str = Query("purpose", pat
     return {"days": days, "group": group, "totals": _fin(total), "items": items,
             "series": [{"date": d, **{k: v for k, v in _fin(series[d]).items() if k in ("calls", "tokens_in", "tokens_out", "fail")}}
                        for d in dates],
-            "priced_models": sorted(table), "purposes": PURPOSE_LABELS, "estimated": True}
+            "priced_models": sorted(table["models"]), "purposes": PURPOSE_LABELS, "estimated": True, "basis": basis}
+
+
+# ---------------------------------------------------------------- v3.3.89 单价表
+
+class PriceTableIn(BaseModel):
+    models: dict[str, dict[str, float]]
+    peak: list[list[float]] = []
+    peak_weekdays_only: bool = True
+
+
+@router.get("/prices")
+def get_prices():
+    return {**pricing.table(), "defaults": pricing.defaults(), "fields": list(pricing.FIELDS)}
+
+
+@router.put("/prices")
+def put_prices(body: PriceTableIn, request: Request, db: Session = Depends(get_db), me: User = Depends(require_admin)):
+    v = pricing.save(db, body.model_dump())
+    db.commit()
+    activity.record("ai_prices", f"AI 单价表：{'、'.join(v['models'])}", user=me, ip=client_ip(request))
+    return get_prices()
 
 
 @router.get("/ledger")
@@ -149,6 +162,9 @@ def quota_overview(db: Session = Depends(get_db)):
     return {"low_threshold": low, "users_with_quota": len(rows), "total_balance": int(sum(b or 0 for _, b in rows)),
             "low_balance_users": sum(1 for _, b in rows if 0 < (b or 0) < low), "exhausted_users": sum(1 for _, b in rows if (b or 0) <= 0),
             "today_calls": db.scalar(select(func.count()).select_from(AiCall).where(AiCall.created_at >= start)) or 0,
+            # v3.3.91 只有邮箱、还没领免费额度（要先绑定微信）的账号
+            "needs_wechat_users": db.scalar(select(func.count()).select_from(User).where(
+                User.role == "user", User.status == "active", User.quota_balance.is_(None), User.wx_openid.is_(None))) or 0,
             "top_users": [{"user": {"id": k, "label": users.label(who[k])} if k in who else {"id": k, "label": f"用户 #{k}"},
                            "used_30d": int(v or 0), "balance": who[k].quota_balance if k in who else None}
                           for k, v in sorted(used.items(), key=lambda x: -(x[1] or 0))]}

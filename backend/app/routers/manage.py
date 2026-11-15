@@ -433,7 +433,8 @@ def set_remark(user_id: int, body: RemarkIn, request: Request, db: Session = Dep
 # ---------------------------------------------------------------- AI 额度
 
 class QuotaSettingsIn(BaseModel):
-    default_free: int = Field(ge=0, le=10_000_000_000)
+    default_free: int | None = Field(None, ge=0, le=10_000_000_000)
+    contact_wechat: str | None = Field(None, max_length=60)
 
 
 @router.get("/quota/settings")
@@ -441,7 +442,7 @@ def quota_settings(db: Session = Depends(get_db)):
     from ..services import billing
 
     return {"default_free": billing.default_free(db), "standard_free": billing.STANDARD_FREE, "rate": billing.RATE,
-            "explain": billing.standard_free_explain(), "not_billed": sorted(billing.NOT_BILLED)}
+            "explain": billing.standard_free_explain(), "not_billed": sorted(billing.NOT_BILLED), "contact": billing.contact(db)}
 
 
 @router.put("/quota/settings")
@@ -449,10 +450,66 @@ def save_quota_settings(body: QuotaSettingsIn, request: Request, db: Session = D
     """免费额度的默认值：只影响之后第一次用到 AI 的账号；已有账号要改用「重置」。"""
     from ..services import billing
 
-    old = billing.default_free(db)
-    billing.set_default_free(db, body.default_free)
+    if body.default_free is not None:
+        old = billing.default_free(db)
+        billing.set_default_free(db, body.default_free)
+        db.commit()
+        activity.record("quota_settings", f"免费额度默认值：{old:,} → {body.default_free:,}", user=me, ip=client_ip(request))
+    if body.contact_wechat is not None:
+        billing.set_contact(db, wechat=body.contact_wechat)
+        db.commit()
+        activity.record("quota_settings", f"额度用完联系微信号：{body.contact_wechat.strip() or '（清空）'}", user=me, ip=client_ip(request))
+    return quota_settings(db)
+
+
+CONTACT_QR_MAX = 5 * 1024 * 1024
+
+
+@router.post("/quota/contact-qr")
+def upload_contact_qr(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), me: User = Depends(require_admin)):
+    """v3.3.89 额度用完弹窗里的微信名片二维码：转成 PNG（最长边 720px），换新文件名防缓存。"""
+    import uuid
+    from io import BytesIO
+
+    from PIL import Image
+
+    from ..services import billing
+
+    raw = file.file.read(CONTACT_QR_MAX + 1)
+    if len(raw) > CONTACT_QR_MAX:
+        raise HTTPException(400, "图片不能超过 5MB")
+    try:
+        img = Image.open(BytesIO(raw))
+        img.load()
+    except Exception:
+        raise HTTPException(400, "无法读取这张图片")
+    img = img.convert("RGB")
+    img.thumbnail((720, 720))
+    folder = settings.media_dir / "contact"
+    folder.mkdir(parents=True, exist_ok=True)
+    old = billing.contact(db)["qr"]
+    rel = f"contact/qr-{uuid.uuid4().hex[:12]}.png"
+    buf = BytesIO()
+    img.save(buf, "PNG", optimize=True)
+    (settings.media_dir / rel).write_bytes(buf.getvalue())
+    billing.set_contact(db, qr_path=rel)
     db.commit()
-    activity.record("quota_settings", f"免费额度默认值：{old:,} → {body.default_free:,}", user=me, ip=client_ip(request))
+    if old and old.startswith("/media/contact/"):
+        (settings.media_dir / old.removeprefix("/media/")).unlink(missing_ok=True)
+    activity.record("quota_settings", "更新额度用完联系名片", user=me, ip=client_ip(request))
+    return quota_settings(db)
+
+
+@router.delete("/quota/contact-qr")
+def delete_contact_qr(request: Request, db: Session = Depends(get_db), me: User = Depends(require_admin)):
+    from ..services import billing
+
+    old = billing.contact(db)["qr"]
+    billing.set_contact(db, qr_path="")
+    db.commit()
+    if old and old.startswith("/media/contact/"):
+        (settings.media_dir / old.removeprefix("/media/")).unlink(missing_ok=True)
+    activity.record("quota_settings", "删除额度用完联系名片", user=me, ip=client_ip(request))
     return quota_settings(db)
 
 

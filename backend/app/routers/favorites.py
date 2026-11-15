@@ -16,7 +16,7 @@ from ..auth import current_user
 from ..db import get_db, utcnow
 from ..models import Category, User, FavDimension, FavFolder, Favorite, FavoriteFolderLink, Item
 from ..seed import KINDS
-from ..services import judge
+from ..services import billing, judge, quota
 
 router = APIRouter(prefix="/api/favorites", tags=["favorites"])
 
@@ -300,8 +300,10 @@ def set_note(item_id: int, body: NoteIn, db: Session = Depends(get_db), owner: i
 # ---------------------------------------------------------------- AI 帮我整理
 
 @router.post("/organize/suggest")
-def organize_suggest(dimension_id: int = Body(..., embed=True), db: Session = Depends(get_db), owner: int = Depends(owner_id)):
-    """给该维度下「未整理」的收藏建议分类，只返回建议，由用户确认后再调用 /move。"""
+def organize_suggest(dimension_id: int = Body(..., embed=True), db: Session = Depends(get_db), me: User = Depends(current_user)):
+    """给该维度下「未整理」的收藏建议分类，只返回建议，由用户确认后再调用 /move。
+    v3.3.90 计入用户额度：额度用完返回 quota_exhausted，消耗记到这个账号（以前漏了，记成了系统消耗）。"""
+    owner = me.id
     d = _dimension(db, owner, dimension_id)
     organized = set(db.scalars(select(FavoriteFolderLink.favorite_id)
                                .where(FavoriteFolderLink.folder_id.in_([f.id for f in d.folders]))).all()) if d.folders else set()
@@ -315,8 +317,10 @@ def organize_suggest(dimension_id: int = Body(..., embed=True), db: Session = De
     items = [{"id": it.id, "name": it.name, "summary": it.summary[:120], "category": it.category.name,
               "kind": KINDS.get(it.kind, ("",))[0]} for it in todo]
     folders = [{"id": f.id, "name": f.name} for f in d.folders]
+    quota.check_ai(db, me)
     try:
-        got = judge.suggest_folders(d.name, folders, items)
+        with billing.charged_to(me.id):
+            got = judge.suggest_folders(d.name, folders, items)
     except judge.JudgeUnavailable as e:
         raise HTTPException(503, f"AI 暂不可用：{e}")
     names = {it.id: it.name for it in todo}

@@ -13,6 +13,9 @@ const purpose = computed(() => (typeof route.query.purpose === 'string' ? route.
 const clearPurpose = () => router.replace({ query: { ...route.query, purpose: undefined } })
 const days = ref(30)
 const group = ref('purpose')
+// v3.3.89 成本口径：按最高价（保守，经营核算用）/ 按实际时段（峰谷、缓存命中）
+const basis = ref('max')
+const BASES = [['max', '按最高价'], ['actual', '按实际时段']]
 const data = ref(null)
 const ov = ref(null)
 const GROUPS = [['purpose', '功能'], ['model', '模型'], ['user', '用户'], ['day', '按天']]
@@ -20,7 +23,7 @@ const GROUPS = [['purpose', '功能'], ['model', '模型'], ['user', '用户'], 
 async function load() {
   data.value = null
   try {
-    data.value = await api(`/api/admin/ai/usage?days=${days.value}&group=${group.value}${purpose.value ? `&purpose=${encodeURIComponent(purpose.value)}` : ''}`)
+    data.value = await api(`/api/admin/ai/usage?days=${days.value}&group=${group.value}&basis=${basis.value}${purpose.value ? `&purpose=${encodeURIComponent(purpose.value)}` : ''}`)
   } catch (e) {
     if (!isCancelled(e)) toast(e.message, 'error')
   }
@@ -32,7 +35,7 @@ async function loadOverview() {
     if (!isCancelled(e)) toast(e.message, 'error')
   }
 }
-watch([days, group, purpose], load, { immediate: true })
+watch([days, group, purpose, basis], load, { immediate: true })
 loadOverview()
 
 const num = (n) => (n == null ? '—' : Number(n).toLocaleString())
@@ -50,18 +53,20 @@ const totals = computed(() => data.value?.totals)
 
 <template>
   <div>
-    <ul v-if="ov" class="m-0 grid list-none grid-cols-2 gap-3.5 p-0 lg:grid-cols-5">
+    <ul v-if="ov" class="m-0 grid list-none grid-cols-2 gap-3.5 p-0 lg:grid-cols-6">
       <li class="card px-[18px] py-3.5"><p class="m-0 text-[13px] text-mute">有额度的用户</p><b class="mt-1 block text-2xl tabular-nums">{{ num(ov.users_with_quota) }}</b></li>
       <li class="card px-[18px] py-3.5"><p class="m-0 text-[13px] text-mute">额度余额合计</p><b class="mt-1 block text-2xl tabular-nums">{{ tok(ov.total_balance) }}</b></li>
       <li class="card px-[18px] py-3.5" :class="ov.low_balance_users ? 'border-warn/50 bg-warn-soft' : ''"><p class="m-0 text-[13px]" :class="ov.low_balance_users ? 'text-warn' : 'text-mute'">余额不足（&lt; {{ tok(ov.low_threshold) }}）</p><b class="mt-1 block text-2xl tabular-nums" :class="{ 'text-warn': ov.low_balance_users }">{{ num(ov.low_balance_users) }}</b></li>
       <li class="card px-[18px] py-3.5" :class="ov.exhausted_users ? 'border-bad/40 bg-bad-soft' : ''"><p class="m-0 text-[13px]" :class="ov.exhausted_users ? 'text-bad' : 'text-mute'">额度用完</p><b class="mt-1 block text-2xl tabular-nums" :class="{ 'text-bad': ov.exhausted_users }">{{ num(ov.exhausted_users) }}</b></li>
+      <li class="card px-[18px] py-3.5"><p class="m-0 text-[13px] text-mute">待绑定微信</p><b class="mt-1 block text-2xl tabular-nums">{{ num(ov.needs_wechat_users) }}</b></li>
       <li class="card px-[18px] py-3.5"><p class="m-0 text-[13px] text-mute">今日调用</p><b class="mt-1 block text-2xl tabular-nums">{{ num(ov.today_calls) }}</b></li>
     </ul>
 
     <section class="card mt-3.5">
       <div class="card-hd">
         <h2>消耗</h2>
-        <div class="seg ml-auto"><button v-for="d in [7, 30, 90]" :key="d" :class="{ on: days === d }" @click="days = d">{{ d }} 天</button></div>
+        <div class="seg ml-auto"><button v-for="b in BASES" :key="b[0]" :class="{ on: basis === b[0] }" @click="basis = b[0]">{{ b[1] }}</button></div>
+        <div class="seg"><button v-for="d in [7, 30, 90]" :key="d" :class="{ on: days === d }" @click="days = d">{{ d }} 天</button></div>
       </div>
       <div v-if="!data" class="card-bd"><div class="skeleton h-52" /></div>
       <div v-else class="card-bd">
@@ -70,7 +75,7 @@ const totals = computed(() => data.value?.totals)
           <li class="rounded-lg px-3 py-2" :class="totals.fail ? 'bg-bad-soft' : 'bg-subtle'"><p class="m-0 text-xs" :class="totals.fail ? 'text-bad' : 'text-mute'">失败</p><b class="text-lg tabular-nums" :class="{ 'text-bad': totals.fail }">{{ num(totals.fail) }}</b></li>
           <li class="rounded-lg bg-subtle px-3 py-2"><p class="m-0 text-xs text-mute">输入 / 输出 token</p><b class="text-lg tabular-nums">{{ tok(totals.tokens_in) }} / {{ tok(totals.tokens_out) }}</b></li>
           <li class="rounded-lg bg-subtle px-3 py-2"><p class="m-0 text-xs text-mute">平均延迟</p><b class="text-lg tabular-nums">{{ ms(totals.avg_latency_ms) }}</b></li>
-          <li class="rounded-lg bg-subtle px-3 py-2"><p class="m-0 text-xs text-mute">估算成本<span class="tag tag-gray ml-1 !h-[18px] !px-1.5 !text-[11px]">估算</span></p><b class="text-lg tabular-nums" :class="totals.est_cost_yuan == null ? 'text-mute' : ''">{{ cost(totals.est_cost_yuan) }}</b></li>
+          <li class="rounded-lg bg-subtle px-3 py-2"><p class="m-0 text-xs text-mute">成本<span class="tag tag-gray ml-1 !h-[18px] !px-1.5 !text-[11px]">{{ basis === 'max' ? '最高价' : '实际时段' }}</span></p><b class="text-lg tabular-nums" :class="totals.est_cost_yuan == null ? 'text-mute' : ''">{{ cost(totals.est_cost_yuan) }}</b></li>
         </ul>
         <div class="mt-4"><ALineChart :data="chartData" :series="SERIES" :height="190" /></div>
       </div>

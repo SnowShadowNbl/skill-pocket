@@ -81,14 +81,14 @@ def test_qr_expired_and_cancel():
     assert mp.post(f"/api/auth/wx/qr/{tok2}/scan").status_code == 410
     assert web.get("/api/auth/wx/qr/nope").status_code == 404
     # 邮箱账号不能扫码确认（必须是小程序微信登录）
-    em = login_client("noqr@example.com")
+    em = login_client("noqr@example.com", wechat=False)
     tok3 = web.post("/api/auth/wx/qr", json={"purpose": "login"}).json()["token"]
     assert em.post(f"/api/auth/wx/qr/{tok3}/scan").status_code == 400
 
 
 def test_qr_bind_without_data():
     assert TestClient(app).post("/api/auth/wx/qr", json={"purpose": "bind"}).status_code == 401
-    web = login_client("bind1@example.com")
+    web = login_client("bind1@example.com", wechat=False)
     tok = web.post("/api/auth/wx/qr", json={"purpose": "bind"}).json()["token"]
     assert TestClient(app).get(f"/api/auth/wx/qr/{tok}").status_code == 403  # 只有发起绑定的人能轮询
     mp, wxu = wx("dave")
@@ -107,7 +107,7 @@ def test_qr_bind_without_data():
 
 
 def test_qr_bind_with_data_needs_merge_confirm():
-    web = login_client("bind2@example.com")
+    web = login_client("bind2@example.com", wechat=False)
     tok = web.post("/api/auth/wx/qr", json={"purpose": "bind"}).json()["token"]
     mp, wxu = wx("erin")
     with SessionLocal() as s:
@@ -126,10 +126,10 @@ def test_qr_bind_with_data_needs_merge_confirm():
 
 
 def test_qr_bind_rejects_wechat_with_other_email():
-    a = login_client("bind3@example.com")
+    a = login_client("bind3@example.com", wechat=False)
     tok = a.post("/api/auth/wx/qr", json={"purpose": "bind"}).json()["token"]
     mp, _ = wx("frank")
-    b = login_client("bind4@example.com")
+    b = login_client("bind4@example.com", wechat=False)
     tok_b = b.post("/api/auth/wx/qr", json={"purpose": "bind"}).json()["token"]
     mp.post(f"/api/auth/wx/qr/{tok_b}/confirm")  # frank 绑到 bind4
     mp2, _ = wx("frank")  # 重新登录拿到 bind4 的令牌

@@ -61,7 +61,7 @@ def test_signup_channel_and_session_method(monkeypatch):
 
 def test_status_needs_reason_and_logs_diff():
     admin = login_client("boss0@example.com", role="admin")
-    target = login_client("victim0@example.com")
+    target = login_client("victim0@example.com", wechat=False)
     uid = target.get("/api/auth/me").json()["user"]["id"]
     r = admin.post(f"/api/admin/users/{uid}/status", json={"status": "disabled", "reason": "短"})
     assert r.status_code == 400 and r.json()["detail"]["code"] == "reason_required"

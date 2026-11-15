@@ -78,7 +78,7 @@ def test_exhausted_balance_blocks_ai_but_not_staff():
         s.get(User, me).quota_balance = 0
         s.commit()
     r = c.post("/api/compare", json={"entries": [{"full_name": "a/b"}, {"full_name": "c/d"}]})
-    assert r.status_code == 402 and "充值" in r.json()["detail"]
+    assert r.status_code == 402 and r.json()["detail"]["code"] == "quota_exhausted" and "管理员" in r.json()["detail"]["message"]
     a = admin()
     with SessionLocal() as s:
         boss = s.scalar(select(User).where(User.email == "boss26@example.com"))

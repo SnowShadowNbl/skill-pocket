@@ -7,6 +7,7 @@ import Icon from './Icon.vue'
 // v3.3 站内搜索框下拉：没输入时显示「最近搜索」和「大家在搜」，输入时给条目名称联想
 const props = defineProps({ q: { type: String, default: '' } })
 const emit = defineEmits(['pick', 'open'])
+const firstLine = (s) => String(s).split(/\r?\n/)[0] // 历史存完整原文（可能多行），这里只显示第一行
 
 const hot = ref(null)
 const sugg = ref([])
@@ -71,7 +72,7 @@ function parts(name) {
         <div class="mb-1.5 flex items-center"><span class="cap">最近搜索</span><button class="ml-auto cursor-pointer text-[12px] text-mute hover:text-danger" @click="clearSearchHistory">清空</button></div>
         <div class="flex flex-wrap gap-1.5">
           <span v-for="(h, i) in searchHistory" :key="h" class="assist-chip group inline-flex items-center rounded-full border border-line bg-white/80 text-[12.5px] transition-colors hover:border-brand" :style="{ '--d': `${i * 25}ms` }">
-            <button class="cursor-pointer py-1 pr-1 pl-2.5 hover:text-brand" @click="emit('pick', h)">{{ h }}</button>
+            <button class="max-w-[220px] cursor-pointer truncate py-1 pr-1 pl-2.5 hover:text-brand" :title="h" @click="emit('pick', h)">{{ firstLine(h) }}</button>
             <button class="grid h-6 w-6 cursor-pointer place-items-center rounded-full text-mute hover:text-danger" :aria-label="`删除 ${h}`" @click="forgetSearch(h)"><Icon name="x" :size="11" /></button>
           </span>
         </div>

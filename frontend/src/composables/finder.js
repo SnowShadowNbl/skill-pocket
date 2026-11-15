@@ -5,7 +5,9 @@ import { api } from '../api'
 export function useFinderJob() {
   const job = ref(null)
   const error = ref('')
+  const errorCode = ref('')
   const starting = ref(false)
+  let last = null
   let timer
   let fails = 0
 
@@ -39,13 +41,16 @@ export function useFinderJob() {
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible)
 
   async function start(path, body) {
+    last = [path, body]
     starting.value = true
     error.value = ''
+    errorCode.value = ''
     try {
       job.value = await api(path, { method: 'POST', body })
       poll()
     } catch (e) {
       error.value = e.message
+      errorCode.value = e.code || ''
     } finally {
       starting.value = false
     }
@@ -62,15 +67,18 @@ export function useFinderJob() {
     poll()
   }
 
+  const retry = () => last && start(...last)
+
   function reset() {
     clearTimeout(timer)
     job.value = null
     error.value = ''
+    errorCode.value = ''
   }
 
   onBeforeUnmount(() => {
     clearTimeout(timer)
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
   })
-  return { job, error, starting, start, poll, open, reset, adopt }
+  return { job, error, errorCode, starting, start, retry, poll, open, reset, adopt }
 }

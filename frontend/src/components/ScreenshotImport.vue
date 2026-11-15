@@ -1,4 +1,6 @@
 <script setup>
+import { WECHAT_BIND_REQUIRED, isQuotaCode, showQuotaExhausted, waitForBind } from '../composables/quota'
+import ErrorNote from './ErrorNote.vue'
 import { useItemLink } from '../composables/itemLink'
 import CheckBox from './CheckBox.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -87,8 +89,13 @@ async function poll() {
   if (resolving.value) pollTimer = setTimeout(poll, 1200)
 }
 
-async function send(file) {
+const errorCode = ref('')
+let lastFile = null
+
+async function send(file, rebound = false) {
   if (!file) return
+  lastFile = file
+  errorCode.value = ''
   if (!(await requireLogin('截图识别需要先登录'))) return
   if (!file.type.startsWith('image/')) return toast('请选择图片文件', 'error')
   if (file.size > 10 * 1024 * 1024) return toast('图片不能超过 10MB', 'error')
@@ -104,7 +111,17 @@ async function send(file) {
   try {
     const res = await fetch('/api/uploads', { method: 'POST', body: fd, headers: authHeaders() })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.detail || `识别失败（${res.status}）`)
+    if (!res.ok) {
+      const d = data.detail
+      const code = (d && d.code) || ''
+      const msg = (d && typeof d === 'object' ? d.message : d) || `识别失败（${res.status}）`
+      // v3.3.93 需要绑定微信：弹窗里绑定好后自动重新识别这张图
+      if (code === WECHAT_BIND_REQUIRED && !rebound) {
+        if (await waitForBind(msg)) return send(file, true)
+      } else if (isQuotaCode(code)) showQuotaExhausted(msg, code)
+      errorCode.value = code
+      throw new Error(msg)
+    }
     applyResult(data, true)
     phase.value = 'done'
     poll()
@@ -289,7 +306,7 @@ onBeforeUnmount(() => {
       <p class="text-xs text-mute">文章配图、榜单、推文、聊天记录都行 · PNG / JPG / WebP · 10MB 以内</p>
       <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onPick" />
     </div>
-    <p v-if="phase === 'error'" class="mt-3 flex items-center gap-2 rounded-2xl bg-danger-soft p-3 text-sm text-danger" role="alert"><Icon name="alert" :size="16" />{{ error }}</p>
+    <ErrorNote v-if="phase === 'error'" class="mt-3" :message="error" :code="errorCode" @retry="send(lastFile, true)" />
 
     <div v-if="phase === 'recognizing' || phase === 'done'" class="lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-5">
       <!-- 截图：桌面端固定在左侧；手机端默认折叠成一条缩略栏 -->

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import utcnow
-from ..models import (TakedownRequest, 
+from ..models import (TakedownRequest, QuotaWxGrant, 
     ActivityLog, AiCall, AuthSession, CategorySubscription, Comment, CompareRun, Event, FavDimension, FavFolder, Favorite, FavoriteFolderLink,
     Feedback, FinderJob, IngestLog, IpBan, Item, ItemReview, Notification, QuotaDaily, QuotaLedger, Task, Upload, User, Visitor,
 )
@@ -22,6 +22,7 @@ REASSIGN = [
     (Visitor, "user_id"), (CompareRun, "user_id"), (IpBan, "created_by"), (Event, "user_id"),
     (Notification, "user_id"),  # v3.3 站内消息
     (TakedownRequest, "user_id"),  # v3.3.48 下架申请
+    (QuotaWxGrant, "user_id"),  # v3.3.91 微信领取免费额度的登记
 ]
 SPECIAL = {("auth_sessions", "user_id"), ("quota_daily", "user_id"), ("users", "merged_into"),
            ("category_subscriptions", "user_id"),  # v3.3 分类订阅：同一分类两边都订了只留一条

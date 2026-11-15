@@ -2,11 +2,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import AppDialog from './components/AppDialog.vue'
+import QuotaDialog from './components/QuotaDialog.vue'
 import TaskTray from './components/TaskTray.vue'
 import ChangelogPanel from './components/ChangelogPanel.vue'
 import Icon from './components/Icon.vue'
 import LoginModal from './components/LoginModal.vue'
 import MiniProgramQr from './components/MiniProgramQr.vue'
+import ModeSwitch from './components/ModeSwitch.vue'
+import { homeMode } from './composables/homeMode'
 import PrivacyNotice from './components/PrivacyNotice.vue'
 import CompareTray from './components/CompareTray.vue'
 import FeedbackModal from './components/FeedbackModal.vue'
@@ -18,7 +21,7 @@ import { authState } from './composables/auth'
 import { favState } from './composables/favorites'
 import { loadMeta, meta } from './composables/meta'
 import { bumpTasks } from './composables/tasks'
-import { goCollect, goSiteSearch } from './composables/collect'
+import { goCollect, goSiteSearch, homeSignal } from './composables/collect'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,8 +52,10 @@ const addOpen = ref(false)
 function pickAdd(kind) {
   addOpen.value = false
   if (kind === 'github') goCollect(router)
+  else if (kind === 'image') router.push('/').then(() => homeSignal.simpleImage++) // v3.3.96 简洁模式：扫描识别图片
   else goSiteSearch(router)
 }
+const simpleHome = computed(() => homeMode.value === 'simple')
 watch(() => route.fullPath, () => (addOpen.value = false))
 
 // 顶栏导航：下划线跟着悬停的链接滑动，离开后回到当前页
@@ -100,7 +105,7 @@ onBeforeUnmount(() => {
     :class="{ 'shadow-[0_8px_24px_-20px_rgb(11_47_122/0.45)]': scrolled }"
   >
     <div class="mx-auto flex h-14 max-w-[1440px] items-center gap-2.5 px-4 md:px-6">
-      <RouterLink to="/" class="logo-mark flex cursor-pointer items-center gap-2 text-[15px] font-semibold tracking-[-0.01em]" title="Skill Pocket · 你的 Skill 口袋">
+      <RouterLink to="/" class="logo-mark flex shrink-0 cursor-pointer items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] whitespace-nowrap" title="Skill Pocket · 你的 Skill 口袋">
         <i aria-hidden="true"><b /><b /><b /><b /></i>Skill Pocket
       </RouterLink>
       <nav ref="nav" class="relative ml-3.5 hidden gap-0.5 md:flex" aria-label="主导航" @mouseleave="inkHome">
@@ -124,7 +129,10 @@ onBeforeUnmount(() => {
         <span class="absolute -bottom-[11px] left-0 h-0.5 rounded-sm bg-brand transition-[transform,width,opacity] duration-450 ease-out-expo" :style="ink" />
       </nav>
       <div class="flex-1" />
-      <ChangelogPanel />
+      <!-- v3.3.96 首页模式开关（只在主页显示，和小程序一样放在铃铛旁） -->
+      <ModeSwitch v-if="isHome(route.path)" class="mr-0.5" />
+      <!-- 手机主页上顶栏放了模式开关，更新日志收起（在「我的」里仍能看到） -->
+      <span class="contents" :class="{ 'max-sm:hidden': isHome(route.path) }"><ChangelogPanel /></span>
       <NotificationBell />
       <UserMenu />
     </div>
@@ -160,7 +168,14 @@ onBeforeUnmount(() => {
   <Transition name="fab">
     <div v-if="addOpen" class="fab-layer fixed inset-0 z-[29] md:hidden" @click="addOpen = false">
       <div class="fab-dim absolute inset-0 bg-[rgb(11_31_68/0.28)] backdrop-blur-[2px]" />
-      <div class="absolute inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] flex justify-center gap-3 px-6" @click.stop>
+      <!-- v3.3.96 简洁模式：只有一项「扫描识别图片」 -->
+      <div v-if="simpleHome" class="absolute inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] flex justify-center px-6" @click.stop>
+        <button class="fab-bubble fab-ai rp flex w-[180px] cursor-pointer flex-col items-start gap-2 rounded-2xl p-3.5 text-left text-white" style="--d: 0ms; --x: 0px" @click="pickAdd('image')">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-white/16"><Icon name="image" :size="20" /></span>
+          <b class="text-[14px] font-semibold">扫描识别图片</b>
+        </button>
+      </div>
+      <div v-else class="absolute inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] flex justify-center gap-3 px-6" @click.stop>
         <button class="fab-bubble rp flex w-[150px] cursor-pointer flex-col items-start gap-2 rounded-2xl border border-line bg-white p-3.5 text-left shadow-[0_18px_36px_-16px_rgb(11_47_122/0.55)]" style="--d: 0ms; --x: 20px" @click="pickAdd('site')">
           <span class="grid h-10 w-10 place-items-center rounded-xl bg-brand-soft text-brand"><Icon name="grid" :size="20" /></span>
           <b class="text-[14px] font-semibold">本站搜索</b>
@@ -209,6 +224,7 @@ onBeforeUnmount(() => {
   <OnboardingTour />
 
   <AppDialog />
+  <QuotaDialog />
   <CompareTray />
   <PrivacyNotice />
   <TaskTray />

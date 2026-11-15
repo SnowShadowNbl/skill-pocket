@@ -3,6 +3,7 @@ import { visitorId } from './composables/analytics'
 import { recordFailure } from './composables/diagnostics'
 import { reportError } from './composables/errorReport'
 import { bumpTasks } from './composables/tasks'
+import { WECHAT_BIND_REQUIRED, isQuotaCode, showQuotaExhausted, waitForBind } from './composables/quota'
 
 export class ApiError extends Error {
   constructor(status, message, code = '') {
@@ -25,7 +26,7 @@ export function authHeaders() {
  * - 自动带上登录令牌；接口要求登录（401 + X-Login-Required）时弹出登录框，登录后自动重试一次；用户关掉登录框则抛出 cancelled
  * - opts.admin = true：管理员操作。未登录先弹登录框；登录的不是管理员时提示「需要管理员权限」
  */
-export async function api(path, { method = 'GET', body, admin: needAdmin = false, _relogin = false } = {}) {
+export async function api(path, { method = 'GET', body, admin: needAdmin = false, quietQuota = false, _relogin = false, _rebound = false } = {}) {
   if (needAdmin && !authState.user) {
     const ok = await requireLogin('这个操作需要管理员账号登录')
     if (!ok) throw new ApiError(401, 'cancelled')
@@ -46,7 +47,7 @@ export async function api(path, { method = 'GET', body, admin: needAdmin = false
     if (authState.user) clearSession() // 令牌过期或被其他设备注销
     const ok = await requireLogin(needAdmin ? '这个操作需要管理员账号登录' : '')
     if (!ok) throw new ApiError(401, 'cancelled')
-    return api(path, { method, body, admin: needAdmin, _relogin: true })
+    return api(path, { method, body, admin: needAdmin, quietQuota, _relogin: true })
   }
 
   const data = await res.json().catch(() => null)
@@ -62,6 +63,13 @@ export async function api(path, { method = 'GET', body, admin: needAdmin = false
     }
     msg = msg || `请求失败（${res.status}）`
     recordFailure(method, path, res.status, msg)
+    // v3.3.93 需要绑定微信：等弹窗里绑定完成后自动重发这次请求；用户关掉弹窗才报错
+    // quietQuota：自动触发的请求（简洁模式右列的 GitHub 搜索）不弹窗，由页面在原位显示提示卡片
+    if (quietQuota) {
+      // 不弹窗
+    } else if (code === WECHAT_BIND_REQUIRED && !_rebound) {
+      if (await waitForBind(msg)) return api(path, { method, body, admin: needAdmin, _relogin, _rebound: true })
+    } else if (isQuotaCode(code)) showQuotaExhausted(msg, code)
     if (res.status >= 500) reportError('api_fail', `${method} ${path.split('?')[0]} ${res.status}：${msg}`)
     throw new ApiError(res.status, msg, code)
   }

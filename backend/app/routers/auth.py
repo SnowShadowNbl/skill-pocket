@@ -10,6 +10,7 @@ from ..db import get_db
 from ..models import Favorite, Item, User
 from ..schemas import LoginIn
 from ..seed import KINDS
+from ..services import billing
 from ..services import mailer, wechat
 from ..services.extract import model_label
 
@@ -59,4 +60,6 @@ def meta(db: Session = Depends(get_db), me: User | None = Depends(auth.current_u
         "asr_enabled": bool(settings.funasr_ws_url),
         "github_token": bool(settings.github_token),
         "admin_configured": bool(settings.admin_password_hash),
+        "quota_contact": billing.contact(db),  # v3.3.89 额度用完弹窗：管理员微信号、名片二维码
+        "free_quota": billing.default_free(db),  # v3.3.91 绑定微信领取的免费额度
     }

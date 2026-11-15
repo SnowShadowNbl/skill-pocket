@@ -7,6 +7,8 @@ import { confirmDialog } from '../../composables/dialog'
 import { toast } from '../../composables/toast'
 import AiLedgerPanel from '../components/AiLedgerPanel.vue'
 import AiUsagePanel from '../components/AiUsagePanel.vue'
+import AiPriceCard from '../components/AiPriceCard.vue'
+import QuotaContactCard from '../components/QuotaContactCard.vue'
 import ASelect from '../components/ASelect.vue'
 
 // AI 与成本：消耗（功能 / 模型 / 用户 / 天，估算成本）、额度账本、免费额度与每个账号每天的用量
@@ -77,7 +79,7 @@ const cellStyle = (v) => (v ? { background: `rgb(37 99 235 / ${0.12 + 0.75 * (v 
       <div v-if="!settings" class="card-bd"><div class="skeleton h-24" /></div>
       <div v-else class="card-bd grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
         <form class="flex flex-wrap items-end gap-2" @submit.prevent="saveDefault()">
-          <label class="min-w-0 flex-1 text-xs text-mute">新账号第一次使用 AI 时发放
+          <label class="min-w-0 flex-1 text-xs text-mute">绑定微信的新账号发放（每个微信一次）
             <input v-model="draft" class="input mt-1" inputmode="numeric" aria-describedby="quota-std" />
           </label>
           <button class="btn btn-primary" :disabled="!draftOk">保存</button>
@@ -91,6 +93,9 @@ const cellStyle = (v) => (v ? { background: `rgb(37 99 235 / ${0.12 + 0.75 * (v 
         </div>
       </div>
     </section>
+
+    <QuotaContactCard class="mt-3.5 block" :settings="settings" @update="settings = $event" />
+    <AiPriceCard class="mt-3.5 block" />
 
     <section class="card mt-3.5">
       <div class="card-hd flex-wrap gap-2">

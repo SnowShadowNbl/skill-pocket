@@ -98,12 +98,24 @@ def model_label(model: str | None = None) -> str:
 def _log_call(purpose: str, ok: bool, latency_ms: int, usage: dict | None, error: str = "") -> None:
     from . import billing
 
+    from . import pricing
+    from ..db import utcnow
+
     uid = billing.owner()
-    tin, tout = (usage or {}).get("prompt_tokens"), (usage or {}).get("completion_tokens")
+    u = usage or {}
+    tin, tout = u.get("prompt_tokens"), u.get("completion_tokens")
+    # DeepSeek：prompt_cache_hit_tokens；OpenAI 兼容：prompt_tokens_details.cached_tokens
+    hit = u.get("prompt_cache_hit_tokens") or (u.get("prompt_tokens_details") or {}).get("cached_tokens")
+    now = utcnow()
+    try:
+        c_max, c_act = pricing.cost(settings.ai_text_model, tin, tout, hit, now)
+    except Exception:  # noqa: BLE001 —— 单价表出问题不能影响记账
+        c_max = c_act = None
     with SessionLocal() as db:
         db.add(AiCall(
             purpose=purpose, model=settings.ai_text_model, ok=ok, latency_ms=latency_ms, error=error[:2000],
-            tokens_in=tin, tokens_out=tout, user_id=uid,
+            tokens_in=tin, tokens_out=tout, user_id=uid, created_at=now,
+            cache_hit_tokens=hit, cost_max_yuan=c_max, cost_actual_yuan=c_act,
         ))
         db.commit()
     if ok and uid:

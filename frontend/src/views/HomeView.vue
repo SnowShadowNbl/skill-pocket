@@ -2,6 +2,8 @@
 import { track } from '../composables/analytics'
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, watchEffect } from 'vue'
 import { ghView } from '../composables/ghView'
+import { homeMode, simpleUi } from '../composables/homeMode'
+import SimpleHome from '../components/simple/SimpleHome.vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { api, formatStars, isCancelled } from '../api'
 import { toast } from '../composables/toast'
@@ -77,7 +79,12 @@ const scope = computed(() => (route.query.scope === 'github' ? 'github' : 'site'
 const ghMounted = ref(scope.value === 'github')
 watch(scope, (v) => v === 'github' && (ghMounted.value = true))
 const active = ref(true) // 首页是否在前台（被缓存到后台时为 false）
-watchEffect(() => (ghView.shown = active.value && scope.value === 'github'))
+// v3.3.96 简洁模式：第一次切过去才创建，之后切回经典只隐藏（搜索结果、勾选都保留）
+const simpleOn = computed(() => homeMode.value === 'simple')
+const simpleMounted = ref(simpleOn.value)
+watch(simpleOn, (v) => v && (simpleMounted.value = true))
+// 加入栏跟着正在显示的那块：简洁模式出了结果时归它，经典模式归 GitHub 面板
+watchEffect(() => (ghView.shown = active.value && (simpleOn.value ? simpleUi.results : scope.value === 'github')))
 // 详情抽屉只在首页自己的地址下渲染（缓存在后台时不跟着别的页面的地址渲染一份）
 const ownRoute = computed(() => route.matched[0]?.path === '/')
 const scopeModel = computed({ get: () => scope.value, set: (v) => setScope(v) })
@@ -620,6 +627,9 @@ onBeforeUnmount(() => {
         <button class="grid h-7 w-7 shrink-0 place-items-center rounded-md hover:bg-white/60" aria-label="关闭横幅" @click="dismissBanner(homeConfig.banner.id)"><Icon name="x" :size="14" /></button>
       </div>
     </div>
+    <!-- v3.3.96 简洁模式 -->
+    <SimpleHome v-if="simpleMounted" v-show="simpleOn" :active="active && simpleOn" />
+    <div v-show="!simpleOn">
     <!-- 紧凑页头：标题 + 指标 + 搜索 -->
     <section ref="hero" class="hero relative z-20 border-b border-line bg-linear-180 from-white to-bg" @pointermove="onHeroMove">
       <!-- v3.3：装饰层单独裁切；页头本身不裁，搜索下拉才能伸出页头 -->
@@ -940,6 +950,7 @@ onBeforeUnmount(() => {
         <button v-else type="submit" class="btn-primary btn-sm h-10 shrink-0" :disabled="!keyword.trim()">搜索</button>
       </form>
     </Transition>
+    </div>
 
     <!-- 详情抽屉 -->
     <RouterView v-slot="{ Component }">

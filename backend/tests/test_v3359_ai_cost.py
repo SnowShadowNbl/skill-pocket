@@ -51,12 +51,13 @@ def setup_module():
 
 
 def test_usage_and_cost(monkeypatch):
+    monkeypatch.setattr(settings, "ai_text_model", "deepseek-flash")  # v3.3.89 文本模型默认有单价（最高价 3 / 9）
     m = login_client("aiboss@example.com", role="admin")
     r = m.get("/api/admin/ai/usage?days=7").json()
     assert r["totals"]["calls"] == 4 and r["totals"]["fail_calls" if "fail_calls" in r["totals"] else "fail"] == 1
     assert r["totals"]["est_cost_yuan"] is None  # 有没配单价的模型
     by = {x["key"]: x for x in r["items"]}
-    assert by["AI-1"]["label"] == "条目提炼" and by["AI-1"]["est_cost_yuan"] is None and by["EMB"]["est_cost_yuan"] == 1.0
+    assert by["AI-1"]["label"] == "条目提炼" and by["AI-1"]["est_cost_yuan"] == 7.5 and by["EMB"]["est_cost_yuan"] == 1.0
     monkeypatch.setattr(settings, "ai_prices", '{"deepseek-flash": [2, 8], "mystery-model": [0, 0]}')
     r = m.get("/api/admin/ai/usage?days=7&group=model").json()
     by = {x["key"]: x for x in r["items"]}

@@ -6,13 +6,14 @@ import { toast } from '../composables/toast'
 import AiTag from './AiTag.vue'
 import CandidateList from './CandidateList.vue'
 import CompareModeToggle from './CompareModeToggle.vue'
+import ErrorNote from './ErrorNote.vue'
 import Icon from './Icon.vue'
 
 // 功能搜索：说出想要的功能或项目名 → AI 生成英文关键词搜 GitHub → 按相关度排序 → 勾选加入。
 // v3.0 由首页搜索框（GitHub 标签）驱动；AI 判断输入其实是一串项目时，后端转成逐个识别，这里通知外层切换视图
 const emit = defineEmits(['manual', 'reroute'])
 const q = ref('')
-const { job, error, starting, start, poll, reset, adopt } = useFinderJob()
+const { job, error, errorCode, starting, start, retry, poll, reset, adopt } = useFinderJob()
 const asking = ref(false)
 
 const STEPS = [
@@ -47,7 +48,7 @@ async function more() {
 
 <template>
   <div>
-    <p v-if="error" class="mt-4 flex items-center gap-2 rounded-2xl bg-danger-soft p-3 text-sm text-danger" role="alert"><Icon name="alert" :size="16" />{{ error }}</p>
+    <ErrorNote v-if="error" class="mt-4" :message="error" :code="errorCode" @retry="retry" />
 
     <div v-if="job">
       <!-- 理解与关键词 -->

@@ -5,6 +5,7 @@ import { useFinderJob } from '../composables/finder'
 import { toast } from '../composables/toast'
 import AiTag from './AiTag.vue'
 import CandidateList from './CandidateList.vue'
+import ErrorNote from './ErrorNote.vue'
 import Icon from './Icon.vue'
 
 // 长文识别：粘贴博主的推荐长文 / 贴文章链接 / 上传 .md .txt，AI 通读后找出提到的所有 Skill、模型、工具、项目
@@ -16,7 +17,7 @@ const text = ref('')
 const url = ref('')
 const fileInput = ref(null)
 const recent = ref([])
-const { job, error, starting, start, open, reset, adopt } = useFinderJob()
+const { job, error, errorCode, starting, start, retry, open, reset, adopt } = useFinderJob()
 
 const STEPS = [
   ['fetch', '抓取文章'],
@@ -115,7 +116,7 @@ defineExpose({ run, open, reset, text })
       </div>
     </template>
 
-    <p v-if="error" class="mt-4 flex items-center gap-2 rounded-2xl bg-danger-soft p-3 text-sm text-danger" role="alert"><Icon name="alert" :size="16" />{{ error }}</p>
+    <ErrorNote v-if="error" class="mt-4" :message="error" :code="errorCode" @retry="retry" />
 
     <div v-if="job">
       <div class="flex flex-wrap items-center gap-2">

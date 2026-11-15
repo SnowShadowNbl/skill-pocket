@@ -37,8 +37,9 @@ def solve_pow(ch: dict) -> str:
         n += 1
 
 
-def login_client(email: str = "u@example.com", role: str = "user"):
-    """建（或复用）一个用户并返回已登录的 TestClient。"""
+def login_client(email: str = "u@example.com", role: str = "user", wechat: bool = True):
+    """建（或复用）一个用户并返回已登录的 TestClient。
+    v3.3.91 免费额度只发给绑定了微信的账号：新建的测试账号默认带一个假的 openid；wechat=False 建纯邮箱账号。"""
     from fastapi.testclient import TestClient
     from sqlalchemy import select
 
@@ -50,7 +51,8 @@ def login_client(email: str = "u@example.com", role: str = "user"):
     with SessionLocal() as db:
         u = db.scalar(select(User).where(User.email == email))
         if u is None:
-            u = User(email=email, nickname=email.split("@")[0], role=role, status="active")
+            u = User(email=email, nickname=email.split("@")[0], role=role, status="active",
+                     wx_openid=f"test-oid-{email}"[:64] if wechat else None)
             db.add(u)
             db.commit()
         from starlette.requests import Request

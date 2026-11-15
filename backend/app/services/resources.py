@@ -70,9 +70,14 @@ def _trim(history: dict, days: int = 90) -> dict:
 
 def record_embedding(tokens: int, ok: bool = True, latency_ms: int = 0, error: str = "") -> None:
     try:
+        from . import pricing
+        from ..db import utcnow
+
+        now = utcnow()
+        c_max, c_act = pricing.cost(settings.embedding_model, tokens, 0, 0, now)
         with SessionLocal() as db:
             db.add(AiCall(purpose=EMB, model=settings.embedding_model, tokens_in=tokens, tokens_out=0, ok=ok,
-                          latency_ms=latency_ms, error=error[:500]))
+                          latency_ms=latency_ms, error=error[:500], created_at=now, cost_max_yuan=c_max, cost_actual_yuan=c_act))
             db.commit()
     except Exception:
         log.exception("record embedding usage failed")

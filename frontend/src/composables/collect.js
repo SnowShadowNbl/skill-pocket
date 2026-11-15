@@ -3,7 +3,7 @@ import { requireLogin } from './auth'
 
 // v3.0「新增 Skill」并入首页搜索框的 GitHub 标签：顶栏「收录」、手机底栏加号都走这里，
 // 切到 GitHub 标签并聚焦搜索框（focus 自增，首页监听）
-export const homeSignal = reactive({ focus: 0, pickFile: 0 })
+export const homeSignal = reactive({ focus: 0, pickFile: 0, simpleImage: 0 }) // simpleImage：简洁模式底栏 ＋ →「扫描识别图片」
 
 export async function goCollect(router, { pickFile = false } = {}) {
   if (!(await requireLogin('登录后就可以收录 Skill'))) return

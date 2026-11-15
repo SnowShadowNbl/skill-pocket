@@ -9,14 +9,14 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import auth
 from ..config import settings
 from ..db import get_db
-from ..models import User
-from ..services import activity, merge, visits, wechat
+from ..models import QuotaLedger, User
+from ..services import activity, billing, merge, visits, wechat
 from ..services.users import label as users_label
 from .account import AVATARS, _consume_code, _norm_email, user_out
 
@@ -52,6 +52,8 @@ def wx_login(body: WxLoginIn, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(403, "这个账号已被停用，如有疑问请联系管理员")
     elif info.get("unionid") and not user.wx_unionid:
         user.wx_unionid = info["unionid"]
+    if is_new:  # v3.3.91 微信注册当场发放免费额度（每个微信只发一次）
+        billing.ensure(db, user)
     token = auth.create_session(db, user, request, "wechat")
     activity.record("register" if is_new else "login", f"{'微信注册' if is_new else '微信登录'}：{user.nickname}", user=user,
                     ip=auth.client_ip(request))
@@ -147,6 +149,7 @@ def merge_account(body: MergeIn, request: Request, me: User = Depends(auth.curre
     before = {"primary": merge.counts(db, primary.id), "secondary": merge.counts(db, secondary.id)}
     try:
         old_avatar = merge.merge_users(db, primary, secondary)
+        billing.ensure(db, primary)  # v3.3.91 合并后邮箱账号带上了微信，按需发放免费额度
         token = auth.create_session(db, primary, request, "merge")  # 与合并同一次提交
     except Exception:
         db.rollback()
@@ -157,6 +160,61 @@ def merge_account(body: MergeIn, request: Request, me: User = Depends(auth.curre
     activity.record("merge_account", f"合并账号：微信账号 #{secondary.id} 并入 {primary.nickname}（#{primary.id}）",
                     user=primary, target_type="user", target_id=secondary.id, detail=before, ip=auth.client_ip(request))
     return {"token": token, "user": user_out(primary)}
+
+
+# ---------------------------------------------------------------- v3.3.92 小程序里给已登录的（邮箱）账号绑定当前微信
+
+class BindWechatIn(BaseModel):
+    code: str = Field(min_length=1, max_length=128)  # wx.login 的 code（一次性，合并确认时要重新取）
+    merge: bool = False
+
+
+def _granted_since(db: Session, user_id: int, last_id: int) -> int:
+    return int(db.scalar(select(func.coalesce(func.sum(QuotaLedger.delta), 0)).where(
+        QuotaLedger.user_id == user_id, QuotaLedger.kind == "grant", QuotaLedger.id > last_id)) or 0)
+
+
+@router.post("/auth/me/wechat")
+def bind_wechat_here(body: BindWechatIn, request: Request, me: User = Depends(auth.current_user), db: Session = Depends(get_db)):
+    """和网页扫码绑定同一套规则，只是微信身份来自 code2session。绑定后按需发放免费额度（每个微信一次），granted 是这次实际发放的数量。"""
+    me = db.get(User, me.id)
+    if me.wx_openid:
+        raise HTTPException(400, "这个账号已经绑定了微信")
+    try:
+        info = wechat.code2session(body.code)
+    except wechat.WechatError as e:
+        raise HTTPException(503 if not wechat.ready() else 400, str(e))
+    last = db.scalar(select(func.coalesce(func.max(QuotaLedger.id), 0))) or 0
+    other = db.scalar(select(User).where(User.wx_openid == info["openid"]))
+    if other is None:
+        me.wx_openid, me.wx_unionid = info["openid"], info.get("unionid") or me.wx_unionid
+        db.flush()
+        billing.ensure(db, me)
+        db.commit()
+        activity.record("bind_wechat", f"小程序绑定微信：{me.nickname}", user=me, ip=auth.client_ip(request))
+        return {"status": "bound", "user": user_out(me), "granted": _granted_since(db, me.id, last)}
+    if other.id == me.id:
+        return {"status": "bound", "user": user_out(me), "granted": 0}
+    if other.status != "active":
+        raise _conflict(request, me, "wechat_disabled", "这个微信对应的账号已被停用，如有疑问请联系管理员", other)
+    if other.email or other.username:
+        raise _conflict(request, me, "wechat_has_email", "这个微信已经绑定了另一个邮箱账号，请先在那个账号里解绑微信", other)
+    c = merge.counts(db, other.id)
+    has_data = any(c.values())
+    if has_data and not body.merge:
+        return {"status": "merge", "preview": _preview(db, me, other)}
+    try:
+        old_avatar = merge.merge_users(db, me, other)
+        billing.ensure(db, me)
+        tok = auth.create_session(db, me, request, "merge")
+    except Exception:
+        db.rollback()
+        log.exception("mp bind merge %s -> %s failed", other.id, me.id)
+        raise HTTPException(500, "绑定失败，数据没有任何改动，请稍后再试")
+    merge.drop_file(old_avatar)
+    activity.record("bind_wechat", f"小程序绑定微信：{me.nickname}{'（合并了微信账号的数据）' if has_data else ''}", user=me,
+                    target_type="user", target_id=other.id, detail={"secondary": other.id, "counts": c}, ip=auth.client_ip(request))
+    return {"status": "merged" if has_data else "bound", "token": tok, "user": user_out(me), "granted": _granted_since(db, me.id, last)}
 
 
 # ---------------------------------------------------------------- 解绑微信
@@ -357,6 +415,7 @@ def qr_confirm(token: str, request: Request, body: QrConfirmIn = QrConfirmIn(), 
         return {"status": "merge", "preview": _preview(db, web, wx_user)}
     try:
         old_avatar = merge.merge_users(db, web, wx_user)
+        billing.ensure(db, web)  # v3.3.91 邮箱账号绑定微信后发放免费额度（这个微信领过就不再发）
         q.status, q.wx_user_id = "done", web.id
         q.result = {"status": "merged" if has_data else "bound"}
         tok = auth.create_session(db, web, request, "merge")  # 小程序随即换成主账号的登录状态
