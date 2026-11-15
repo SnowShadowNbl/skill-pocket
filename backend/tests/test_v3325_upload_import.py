@@ -91,3 +91,22 @@ def test_import_marks_rows_importing_then_existing(monkeypatch):
     assert g["items"][0]["state"] == "existing" and g["items"][0]["existing_item_id"] == 77
     assert g["items"][1]["state"] == "matched"
     assert g["import"]["resolved"] == [{"full_name": "o/c", "sub_path": None, "item_id": 77}]
+
+
+def test_resolve_adds_chinese_description(monkeypatch):
+    from app.services import judge
+    monkeypatch.setattr(judge, "translate_descs", lambda d: {k: "中文：" + v for k, v in d.items() if k == "o/a"})
+    with SessionLocal() as db:
+        rec = Upload(image_path="uploads/y.png", status="recognized", user_id=None, ai_result={"items": [
+            {"name": "a", "state": "matched", "match": {"full_name": "o/a", "description": "tool A"}},
+            {"name": "b", "state": "matched", "match": {"full_name": "o/b", "description": "tool B"}},
+            {"name": "c", "state": "unmatched", "match": None}]})
+        db.add(rec)
+        db.commit()
+        uid = rec.id
+    uploads._add_zh(uid)
+    with SessionLocal() as db:
+        items = db.get(Upload, uid).ai_result["items"]
+    assert items[0]["match"]["description_zh"] == "中文：tool A"
+    assert items[1]["match"]["description_zh"] == ""  # 没译出来：空串，前端显示英文
+    assert items[2]["match"] is None

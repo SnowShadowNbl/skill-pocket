@@ -465,6 +465,8 @@ class User(Base):
     signup_channel: Mapped[str] = mapped_column(String(16), default="", server_default="")
     last_client: Mapped[str] = mapped_column(String(16), default="", server_default="")
     last_client_version: Mapped[str] = mapped_column(String(40), default="", server_default="")
+    # v3.3.85 账号偏好：home_mode（classic / simple，小程序首页模式）、search_history（最近搜索，最多 10 条）
+    prefs: Mapped[dict | None] = mapped_column(JSON)
 
 
 class QuotaLedger(Base):

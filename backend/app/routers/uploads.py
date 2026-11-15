@@ -20,7 +20,7 @@ from ..models import Item, Repo, Upload, UploadItem
 from .. import auth
 from ..auth import current_user
 from ..models import User
-from ..services import activity, billing, ingest, quota, review, tracking, vision
+from ..services import activity, billing, ingest, judge, quota, review, tracking, vision
 from ..services.github import GitHub, GitHubError
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
@@ -117,6 +117,30 @@ def _resolve_all(upload_id: int, items: list[dict]) -> None:
             uid = rec.user_id if rec else None
         with ThreadPoolExecutor(max_workers=4) as pool:
             list(pool.map(billing.wrap(uid, one), list(enumerate(items))))
+    with billing.charged_to(uid):
+        _add_zh(upload_id)
+
+
+def _add_zh(upload_id: int) -> None:
+    """v3.3.87 对应到仓库后，把英文简介批量译成中文写进 match.description_zh（小程序简洁模式 GitHub 列显示）。失败就保持英文。"""
+    with SessionLocal() as db:
+        rec = db.get(Upload, upload_id)
+        items = ((rec.ai_result or {}).get("items") or []) if rec else []
+    descs = {m["full_name"]: m["description"] for m in ((it.get("match") or {}) for it in items)
+             if m.get("full_name") and m.get("description") and "description_zh" not in m}
+    if not descs:
+        return
+    try:
+        zh = judge.translate_descs(descs)
+    except judge.JudgeUnavailable:
+        return
+    with _write_lock, SessionLocal() as db:
+        rec = db.get(Upload, upload_id)
+        data = dict(rec.ai_result)
+        data["items"] = [{**it, "match": {**it["match"], "description_zh": zh.get(it["match"]["full_name"], "")}}
+                         if (it.get("match") or {}).get("full_name") in descs else it for it in data["items"]]
+        rec.ai_result = data
+        db.commit()
 
 
 def _out(rec: Upload) -> dict:

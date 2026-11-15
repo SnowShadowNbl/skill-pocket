@@ -118,7 +118,7 @@ def test_search_flow(monkeypatch):
         "intent": "feature", "kind": "model", "understanding": "找人脸识别模型",
         "queries": ["face recognition model", "insightface"], "skill_queries": []})
     monkeypatch.setattr(judge, "rerank", lambda need, cands: {
-        "deepinsight/insightface": {"score": 95, "kind": "model", "reason": "主流人脸识别库"},
+        "deepinsight/insightface": {"score": 95, "kind": "model", "reason": "主流人脸识别库", "desc_zh": "二维与三维人脸分析工具库"},
         "x/face-rec": {"score": 70, "kind": "model", "reason": "人脸识别模型"},
         "y/todo": {"score": 5, "kind": "app", "reason": "无关"},
     })
@@ -129,6 +129,9 @@ def test_search_flow(monkeypatch):
         assert job.status == "done", job.result
         names = [c["full_name"] for c in job.result["candidates"]]
     assert names == ["deepinsight/insightface", "x/face-rec"]  # 无关结果被过滤，按相关度排序
+    first = job.result["candidates"][0]
+    assert first["description_zh"] == "二维与三维人脸分析工具库" and first["match"]["description_zh"] == "二维与三维人脸分析工具库"
+    assert job.result["candidates"][1]["match"]["description_zh"] == ""
 
 
 def test_search_needs_ai_for_chinese():

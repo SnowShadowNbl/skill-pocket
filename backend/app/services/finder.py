@@ -287,7 +287,7 @@ def _run_search(job_id: int, more: bool) -> None:
             ex = _existing(c["full_name"], c["sub_path"])
             c.update(name=c.get("skill_id") or c["full_name"].split("/")[1], score=None, reason="", kind=plan.get("kind") or "",
                      state="existing" if ex else "matched", existing_item_id=ex,
-                     match={k: c[k] for k in ("full_name", "html_url", "description", "stars", "language")})
+                     match={k: c.get(k) for k in ("full_name", "html_url", "description", "description_zh", "stars", "language")})
         _update(job_id, stage="rank", message=f"搜到 {len(cands)} 个，AI 正在按相关度排序…",
                 candidates=list(old.values()) + prelim, preliminary=True)
         try:
@@ -296,7 +296,8 @@ def _run_search(job_id: int, more: bool) -> None:
             scores = {}
         for c in cands:
             s = scores.get(c["full_name"].lower())
-            c.update(score=s["score"] if s else None, reason=s["reason"] if s else "", kind=(s or {}).get("kind") or plan.get("kind") or "")
+            c.update(score=s["score"] if s else None, reason=s["reason"] if s else "", kind=(s or {}).get("kind") or plan.get("kind") or "",
+                     description_zh=(s or {}).get("desc_zh") or "")  # v3.3.86 中文简介，小程序简洁模式 GitHub 列用
         if scores:
             cands = [c for c in cands if (c["score"] or 0) >= MIN_SCORE]
             cands.sort(key=lambda c: (-(c["score"] or 0), -c["hits"], -(c["stars"] or 0)))
@@ -310,7 +311,7 @@ def _run_search(job_id: int, more: bool) -> None:
             c["name"] = c["skill_id"] if c.get("skill_id") and c["sub_path"] else c["full_name"].split("/")[1]
             ex = _existing(c["full_name"], c["sub_path"])
             c.update(state="existing" if ex else "matched", existing_item_id=ex,
-                     match={k: c[k] for k in ("full_name", "html_url", "description", "stars", "language")})
+                     match={k: c.get(k) for k in ("full_name", "html_url", "description", "description_zh", "stars", "language")})
 
     merged = list(old.values()) + cands
     msg = f"找到 {len(cands)} 个相关结果" if cands else "这次没找到更相关的结果"

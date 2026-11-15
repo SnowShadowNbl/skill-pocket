@@ -32,7 +32,7 @@ def user_out(u: User) -> dict:
     out = {"id": u.id, "email": u.email, "username": u.username, "nickname": u.nickname, "avatar": u.avatar,
            "role": u.role, "has_password": bool(u.password_hash), "created_at": u.created_at,
            "needs_setup": auth.admin_needs_setup(u),
-           "wechat_bound": bool(u.wx_openid), "has_email": bool(u.email)}
+           "wechat_bound": bool(u.wx_openid), "has_email": bool(u.email), "prefs": u.prefs or {}}
     if u.role in auth.STAFF_ROLES:  # v3.3.55 管理员：角色、各后台模块的读写权限、能力
         from ..services import permissions
 
@@ -284,6 +284,49 @@ def update_profile(body: ProfileIn, user: User = Depends(auth.current_user), db:
         user.avatar = body.avatar
     db.commit()
     return {"user": user_out(user)}
+
+
+# ---------------------------------------------------------------- 偏好（v3.3.85）
+
+HOME_MODES = ("classic", "simple")
+HISTORY_MAX, HISTORY_LEN = 10, 200
+
+
+class PrefsIn(BaseModel):
+    home_mode: str | None = None
+    search_history: list[str] | None = None
+
+
+def _clean_history(items: list[str]) -> list[str]:
+    out, seen = [], set()
+    for s in items:
+        s = (s or "").strip()[:HISTORY_LEN]
+        if len(s) < 2 or s.lower() in seen:
+            continue
+        seen.add(s.lower())
+        out.append(s)
+        if len(out) >= HISTORY_MAX:
+            break
+    return out
+
+
+@router.get("/me/prefs")
+def get_prefs(user: User = Depends(auth.current_user)):
+    return user.prefs or {}
+
+
+@router.patch("/me/prefs")
+def update_prefs(body: PrefsIn, user: User = Depends(auth.current_user), db: Session = Depends(get_db)):
+    prefs = dict(user.prefs or {})
+    if body.home_mode is not None:
+        if body.home_mode not in HOME_MODES:
+            raise HTTPException(400, "首页模式不存在")
+        prefs["home_mode"] = body.home_mode
+    if body.search_history is not None:
+        prefs["search_history"] = _clean_history(body.search_history)
+    user.prefs = prefs  # 整个换掉，JSON 列才会被识别为已修改
+    db.commit()
+    return prefs
 
 
 # ---------------------------------------------------------------- 上传头像

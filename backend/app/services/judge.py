@@ -149,7 +149,7 @@ def plan_search(q: str, avoid: list[str] | None = None) -> dict:
 
 
 RERANK_PROMPT = """根据用户需求，给 GitHub 搜索到的候选打分并排序，只输出 JSON：
-{"results": [{"full_name": "...", "score": 0~100, "kind": "使用类型 key", "reason": "一句中文说明它是什么、为什么符合（或不符合）需求，不超过 50 字"}]}
+{"results": [{"full_name": "...", "score": 0~100, "kind": "使用类型 key", "reason": "一句中文说明它是什么、为什么符合（或不符合）需求，不超过 50 字", "desc_zh": "把它的英文简介忠实译成通顺的中文，不超过 80 字；简介为空时根据名称和 topics 概括它是什么"}]}
 - score 表示和需求的相关度：90+ 正是要找的；60~89 相关可用；40~59 沾边；40 以下基本无关
 - 只看是否满足需求，不要因为星标高就给高分；用户点名的项目给最高分
 - 每个候选都要给出结果"""
@@ -169,7 +169,8 @@ def rerank(need: str, candidates: list[dict]) -> dict[str, dict]:
             except (TypeError, ValueError):
                 score = 0
             out[str(x["full_name"]).lower()] = {"score": score, "kind": _kind(x.get("kind")),
-                                                "reason": str(x.get("reason") or "")[:200]}
+                                                "reason": str(x.get("reason") or "")[:200],
+                                                "desc_zh": str(x.get("desc_zh") or "")[:200]}
     return out
 
 
@@ -467,6 +468,18 @@ def analyze_feedback(fb: dict, server_logs: list[dict], recent: list[dict]) -> d
 
 
 # ---------------------------------------------------------------- 用户探真：境外地名译成中文
+
+# ---------------------------------------------------------------- v3.3.87 仓库简介译成中文（截图识别结果用）
+
+def translate_descs(descs: dict[str, str]) -> dict[str, str]:
+    """{full_name: 英文简介} → {full_name: 中文简介}。已经是中文的原样返回。"""
+    data = _ask(
+        "把下面 GitHub 仓库的简介忠实译成通顺的简体中文，每条不超过 80 字；已经是中文的原样保留；专有名词、产品名保留英文。"
+        '只输出 JSON：{"results": {"仓库全名": "中文简介"}}',
+        _dump(descs), "AI-4")  # 记在截图识别名下
+    res = data.get("results") or {}
+    return {k: str(v)[:200] for k, v in res.items() if k in descs and isinstance(v, str) and v.strip()}
+
 
 def translate_places(names: list[str]) -> dict[str, str]:
     """「United States|California|Google LLC」这类英文地名 → 中文（国家、州省、城市、运营商常用译名）。"""
