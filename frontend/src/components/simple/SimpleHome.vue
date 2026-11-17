@@ -11,6 +11,7 @@ import { WECHAT_BIND_REQUIRED, isQuotaCode, showQuotaExhausted, waitForBind } fr
 import { clearSearchHistory, forgetSearch, rememberSearch, searchHistory } from '../../composables/searchHistory'
 import { addPending, bumpTasks, removePending } from '../../composables/tasks'
 import { toast } from '../../composables/toast'
+import { startVoice, voiceSupported } from '../../composables/voice'
 import CheckBox from '../CheckBox.vue'
 import CompareModeToggle from '../CompareModeToggle.vue'
 import ErrorNote from '../ErrorNote.vue'
@@ -292,12 +293,15 @@ function onDrop(e) {
   if (f) runImage(f)
 }
 // 手机底栏 ＋ →「扫描识别图片」
-watch(() => homeSignal.simpleImage, () => nextTick(pickImage))
+// 底栏图片按钮：同步触发（iPhone 只允许在点击的同一时刻打开相册）
+watch(() => homeSignal.simpleImage, () => pickImage(), { flush: 'sync' })
 
 // ---------------------------------------------------------------- 提交
 function submit(text) {
   const q = (text || '').trim()
   if (!q) return
+  polishSeq++
+  polish.state = 'idle'
   focused.value = false
   ta.value?.blur()
   rememberSearch(q)
@@ -587,29 +591,220 @@ const homeOn = computed(() => homeMode.value === 'simple')
 const narrowMq = matchMedia('(max-width: 480px)')
 const narrow = ref(narrowMq.matches)
 narrowMq.addEventListener?.('change', (e) => (narrow.value = e.matches))
+
+// ================================================================ v3.3.103 简洁模式（Personal Agent 形式）
+// 搜索前：标题 → 输入框 → 常用标签 → 鹈鹕骑行动画（手机和电脑同一布局，v3.3.105 起）；
+// 长按空输入框或按住麦克风说话，松手把文字填进输入框（不自动搜索），随后整理语句、可恢复原话；
+// 点搜索：输入框滑到顶部，标题、标签和鹈鹕收起并卸载（不再占用性能），结果照旧。
+// 进入页面时输入框不自动获取焦点。
+const mobileMq = matchMedia('(max-width: 767px)')
+const mobile = ref(mobileMq.matches)
+mobileMq.addEventListener?.('change', (e) => (mobile.value = e.matches))
+
+// 热门标签：固定 9 个常见需求（「大家在搜」里常有零散的英文词，不适合放在首页）
+const tags = ['PDF 转 PPT', '会议纪要整理', '截图转文字', '语音转文字', '网页数据抓取', '简历优化', '代码审查', '图片去背景', '论文翻译']
+
+// 鹈鹕动画：加载完再淡入，避免白块闪一下
+const pelicanReady = ref(false)
+
+// 录音状态（下面的逐字提示也要用）
+const rec = reactive({ on: false, text: '', cancel: false, level: 0, starting: false, top: 280 })
+
+// ---------------------------------------------------------------- 提示文字一个字一个字打出来（打完停一会，退回去再打）
+const TW = '输入文字或长按语音'
+const twText = ref('')
+let twTimer = 0
+let twI = 0
+let twDir = 1
+const twOn = computed(() => !draft.value && !focused.value && !rec.on && props.active && homeOn.value)
+function twTick() {
+  // 光标和经典模式一样：打字时末尾跟一个「▍」，打完和退格时不显示
+  twText.value = TW.slice(0, twI) + (twDir > 0 && twI < TW.length ? '▍' : '')
+  let wait = twDir > 0 ? 120 : 45
+  if (twDir > 0 && twI === TW.length) {
+    twDir = -1
+    wait = 2200
+  } else if (twDir < 0 && twI === 0) {
+    twDir = 1
+    wait = 500
+  } else twI += twDir
+  twTimer = setTimeout(twTick, wait)
+}
+watch(twOn, (on) => {
+  clearTimeout(twTimer)
+  if (!on) return
+  twI = 0
+  twDir = 1
+  twTick()
+}, { immediate: true })
+
+// ---------------------------------------------------------------- 语音：长按空输入框 / 按住麦克风
+let session = null
+let pressTimer = 0
+let pressing = false
+let startY = 0
+const LONG = 380
+const CANCEL_DY = 70
+
+async function startRec() {
+  if (rec.on || rec.starting) return
+  window.getSelection?.()?.removeAllRanges()
+  if (!voiceSupported()) return toast('当前环境不支持录音，请用 HTTPS 打开或直接输入文字', 'info', 3000)
+  if (!authState.user && !(await requireLogin('登录后就可以语音输入'))) return
+  rec.starting = true
+  // 浮层位置：输入框下方（放不下时贴着屏幕底部留出空间）
+  const below = boxEl.value?.querySelector('form')?.getBoundingClientRect().bottom ?? 0
+  rec.top = Math.max(16, Math.min(below + 12, window.innerHeight - 220))
+  Object.assign(rec, { on: true, text: '', cancel: false, level: 0 })
+  navigator.vibrate?.(12)
+  try {
+    session = await startVoice({
+      onText: (t) => (rec.text = t),
+      onLevel: (l) => (rec.level = l),
+      onError: (m) => toast(m || '语音服务暂不可用', 'error', 3000),
+    })
+    if (!rec.on) session.cancel() // 还没连上就松手了
+  } catch (e) {
+    rec.on = false
+    toast(e?.name === 'NotAllowedError' ? '没有麦克风权限，请在浏览器设置里允许' : '无法打开麦克风', 'error', 3000)
+  } finally {
+    rec.starting = false
+  }
+}
+async function stopRec() {
+  if (!rec.on) return
+  const cancel = rec.cancel
+  rec.on = false
+  const s = session
+  session = null
+  if (!s) return
+  if (cancel) return s.cancel()
+  let text = rec.text
+  try {
+    text = (await s.stop()) || text
+  } catch {}
+  text = (text || '').trim().replace(/[。．.]+$/, '') // 语音识别的末尾句号不要
+  if (!text) return toast('没有听清，再说一次试试', 'info', 2400)
+  setText(draft.value.trim() ? `${draft.value.trim()} ${text}` : text)
+  tidy(draft.value)
+}
+// 输入框空着且没在输入时，上面盖一层「假输入框」：提示文字是动画，不是真的输入框，
+// 长按它说话不会触发系统选字 / 全选；点一下才让真正的输入框获得焦点、弹出键盘。
+const voiceArmed = computed(() => !draft.value && !focused.value)
+let pressId = null
+let suppressClick = false
+const noSelect = (on) => document.documentElement.classList.toggle('sh-noselect', on)
+function onPressStart(e, force = false) {
+  if (e.button > 0 || pressId !== null) return
+  if (!force && !voiceArmed.value) return
+  pressId = e.pointerId
+  startY = e.clientY
+  noSelect(true)
+  try {
+    e.currentTarget.setPointerCapture(e.pointerId) // 手指滑出按钮也能收到松手
+  } catch {}
+  clearTimeout(pressTimer)
+  pressTimer = setTimeout(() => {
+    pressing = true
+    suppressClick = true
+    startRec()
+  }, force ? 0 : LONG)
+}
+function onPressMove(e) {
+  if (e.pointerId !== pressId) return
+  if (pressing) rec.cancel = startY - e.clientY > CANCEL_DY
+  else if (Math.abs(e.clientY - startY) > 10) clearTimeout(pressTimer)
+}
+function onPressEnd(e) {
+  if (e.pointerId !== pressId) return
+  pressId = null
+  clearTimeout(pressTimer)
+  noSelect(false)
+  if (!pressing) return
+  pressing = false
+  e.preventDefault()
+  stopRec()
+}
+// 点假输入框：聚焦真正的输入框（放在 click 里，iOS 才会弹键盘）
+function onFakeClick() {
+  if (suppressClick) return (suppressClick = false)
+  ta.value?.focus()
+}
+function onMicClick() {
+  if (suppressClick) return (suppressClick = false)
+  if (!rec.on) toast('按住说话', 'info', 1600)
+}
+
+// ---------------------------------------------------------------- 语音文字整理
+const polish = reactive({ state: 'idle', raw: '', out: '' }) // idle / working / done
+let polishSeq = 0
+async function tidy(text) {
+  const my = ++polishSeq
+  Object.assign(polish, { state: 'working', raw: text, out: '' })
+  try {
+    const r = await api('/api/voice/normalize', { method: 'POST', body: { text } })
+    if (my !== polishSeq || draft.value !== text) return // 期间用户改过文字：以用户的为准
+    if (r.changed) {
+      setText(r.text)
+      Object.assign(polish, { state: 'done', out: r.text })
+    } else polish.state = 'idle'
+  } catch {
+    if (my === polishSeq) polish.state = 'idle'
+  }
+}
+function undoPolish() {
+  polishSeq++
+  setText(polish.raw)
+  polish.state = 'idle'
+}
+// 用户自己改了文字，整理提示就收起
+watch(draft, (v) => {
+  if (polish.state === 'done' && v !== polish.out) polish.state = 'idle'
+  if (polish.state === 'working' && v !== polish.raw) {
+    polishSeq++
+    polish.state = 'idle'
+  }
+})
+
+// 简洁模式首页滚到底就停住，不出现 iOS 回弹（回弹时底部会露出一截空白）
+watch(() => props.active && homeOn.value, (on) => document.documentElement.classList.toggle('sh-noover', on), { immediate: true })
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('sh-noover')
+  clearTimeout(twTimer)
+  clearTimeout(pressTimer)
+  noSelect(false)
+  session?.cancel()
+})
 </script>
 
 <template>
-  <section class="sh relative" :class="phase === 'idle' ? 'sh-idle' : 'sh-res'" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="onDrop">
-    <!-- 背景：页头同款网格与光晕 -->
-    <div class="pointer-events-none absolute inset-0 overflow-hidden">
-      <div class="hero-grid" />
-      <span class="hero-glow -top-[220px] -right-[120px] h-[420px] w-[420px] bg-[rgb(90_162_255/0.30)]" />
-      <span class="hero-glow -top-10 -left-40 h-[300px] w-[300px] bg-[rgb(30_86_214/0.12)] [animation-delay:-8s] [animation-duration:26s]" />
-    </div>
-
-    <div class="relative mx-auto px-4 md:px-6" :class="phase === 'idle' ? 'max-w-[760px] pt-8 md:pt-[9vh]' : 'max-w-[1440px] pt-4 md:pt-5'">
+  <section class="sh sh-agent relative" :class="phase === 'idle' ? 'sh-idle' : 'sh-res'" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="onDrop">
+    <div class="relative mx-auto px-4 md:px-6" :class="phase === 'idle' ? 'max-w-[760px] pt-[6vh] md:pt-[9vh]' : 'max-w-[1440px] pt-4 md:pt-5'">
       <!-- 抬头：搜索前居中显示，搜索后收起 -->
       <Transition name="sh-title">
         <div v-if="phase === 'idle'" class="mb-5 text-center md:mb-7">
-          <h1 class="m-0 text-[26px] leading-9 font-semibold tracking-[-0.025em] md:text-[38px] md:leading-[48px]">一起探索 <em class="text-gradient not-italic">开源世界</em></h1>
+          <h1 class="m-0 text-[25px] leading-[36px] font-bold tracking-[-0.02em] md:text-[30px] md:leading-[42px]"><em class="text-gradient not-italic">Skill Pocket</em> 可以帮你<br class="md:hidden" />搜索你想要的<em class="text-gradient not-italic">开源内容</em></h1>
         </div>
       </Transition>
 
       <!-- 搜索框 -->
-      <div ref="boxEl" class="relative z-30" :class="phase === 'idle' ? '' : 'mx-auto max-w-[920px]'">
-        <form class="sh-box flex items-center gap-2 rounded-[14px] border bg-white py-[6px] pr-[6px] pl-3.5" :class="[focused ? 'is-focus' : '', dragging ? 'is-drag' : '']" role="search" @submit.prevent="submit(draft)">
-          <Icon name="search" :size="19" class="shrink-0 self-center text-mute" />
+      <div ref="boxEl" class="z-20" :class="phase === 'idle' ? 'relative' : 'relative mx-auto max-w-[920px]'">
+        <!-- 语音整理状态：整理中 / 已整理（可恢复原话） -->
+        <Transition name="toast">
+          <div v-if="polish.state !== 'idle'" class="absolute inset-x-0 bottom-full mb-2 flex items-center gap-2 px-1 text-[12px]">
+            <span v-if="polish.state === 'working'" class="inline-flex items-center gap-1.5 text-brand"><Icon name="refresh" :size="13" class="animate-spin" />正在整理语句…</span>
+            <template v-else>
+              <span class="inline-flex items-center gap-1 font-semibold text-brand"><Icon name="check" :size="13" />已整理语句</span>
+              <button type="button" class="ml-auto cursor-pointer rounded-full bg-white/90 px-3 py-1 text-ink-2 shadow-[inset_0_0_0_1px_var(--color-line)]" @click="undoPolish">恢复原话</button>
+            </template>
+          </div>
+        </Transition>
+        <form class="sh-box flex items-center gap-2 border bg-white py-[6px] pr-[6px] pl-3.5" :class="[focused ? 'is-focus' : '', dragging ? 'is-drag' : '', mobile ? 'rounded-[18px]' : 'rounded-[14px]']" role="search" @submit.prevent="submit(draft)">
+          <Icon name="search" :size="19" class="shrink-0 self-center text-mute max-md:hidden" />
+          <div class="relative flex min-w-0 flex-1 self-center">
+          <!-- 假输入框：逐字打出的提示文字动画；长按说话，点一下才聚焦真正的输入框 -->
+          <div v-if="voiceArmed" class="sh-fake absolute inset-0 z-[1] flex cursor-text items-center text-[16px] whitespace-nowrap text-mute md:text-[15.5px]" aria-hidden="true"
+            @pointerdown="onPressStart($event)" @pointermove="onPressMove" @pointerup="onPressEnd" @pointercancel="onPressEnd" @click="onFakeClick" @contextmenu.prevent>{{ twOn ? twText : TW }}</div>
           <textarea
             ref="ta"
             v-model="draft"
@@ -617,24 +812,28 @@ narrowMq.addEventListener?.('change', (e) => (narrow.value = e.matches))
             maxlength="2000"
             enterkeyhint="search"
             class="min-w-0 flex-1 resize-none self-center bg-transparent py-1 text-[16px] leading-6 text-ink outline-none placeholder:text-mute md:text-[15.5px]"
-            :placeholder="narrow ? '描述想找的 Skill' : '描述你想找的 Skill 或模型'"
+            :class="{ 'sh-polished': polish.state === 'done' }"
             aria-label="描述你想找的 Skill 或模型"
             @keydown="onKey"
             @focus="focused = true"
             @blur="onBlur"
             @paste="onPaste"
           />
+          </div>
           <button v-if="draft" type="button" class="grid h-8 w-8 shrink-0 cursor-pointer place-items-center self-center rounded-full text-mute hover:text-ink" aria-label="清空" @click="setText(''); ta?.focus()">
             <span class="grid h-[18px] w-[18px] place-items-center rounded-full bg-ink/25 text-white"><Icon name="x" :size="12" /></span>
           </button>
-          <button type="button" class="grid h-10 w-10 shrink-0 cursor-pointer place-items-center self-center rounded-[9px] text-ink-2 transition-colors hover:bg-hover hover:text-brand" title="上传或粘贴截图识别" aria-label="图片搜索" @click="pickImage"><Icon name="camera" :size="19" /></button>
+          <button type="button" class="grid h-10 w-10 shrink-0 cursor-pointer place-items-center self-center rounded-[9px] text-ink-2 transition-colors hover:bg-hover hover:text-brand max-md:hidden" title="上传或粘贴截图识别" aria-label="图片搜索" @click="pickImage"><Icon name="camera" :size="19" /></button>
+          <!-- 按住说话 -->
+          <button type="button" class="sh-mic grid h-10 w-10 shrink-0 cursor-pointer place-items-center self-center rounded-[12px]" :class="{ 'is-rec': rec.on }" aria-label="按住说话" title="按住说话"
+            @pointerdown="onPressStart($event, true)" @pointermove="onPressMove" @pointerup="onPressEnd" @pointercancel="onPressEnd" @contextmenu.prevent @click.prevent="onMicClick"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           <button type="submit" class="btn-primary h-10 shrink-0 self-center px-4 sm:px-5" :disabled="!draftT">搜索</button>
           <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFile" />
         </form>
 
         <!-- 联想面板 -->
         <Transition name="toast">
-          <div v-if="showPanel" class="sh-panel glass-strong absolute inset-x-0 top-full z-40 mt-2 max-h-[min(420px,60vh)] overflow-y-auto rounded-[12px] p-2" @mousedown.prevent>
+          <div v-if="showPanel" class="sh-panel glass-strong absolute z-40 max-h-[min(420px,60vh)] overflow-y-auto rounded-[12px] p-2 inset-x-0 top-full mt-2" @mousedown.prevent>
             <button v-if="panelMode === 'repo'" class="sh-row flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2.5 text-left hover:bg-hover" @click="pickText(draftT)">
               <Icon name="github" :size="15" class="shrink-0 text-brand" /><span class="min-w-0 flex-1 truncate text-[14px] font-medium">直接收录这个仓库</span>
             </button>
@@ -679,41 +878,19 @@ narrowMq.addEventListener?.('change', (e) => (narrow.value = e.matches))
       <!-- v3.3.100 只有邮箱、还没领免费额度：提示绑定微信 -->
       <div :class="phase === 'idle' ? 'mt-3' : 'mx-auto mt-2.5 max-w-[920px]'"><BindTipBar /></div>
 
-      <!-- 空态插画：口袋与漂浮卡片、玻璃小方块，点一下有回应；搜索后淡出 -->
-      <div v-if="phase === 'idle'" class="sh-art relative mx-auto mt-6 h-[300px] max-w-[560px] md:mt-10 md:h-[320px]" aria-hidden="true">
-        <img src="/simple/glow.svg" alt="" class="sh-breath pointer-events-none absolute inset-x-6 top-0 h-[190px] w-[calc(100%-48px)] object-cover" />
-        <img src="/simple/orbit.svg" alt="" class="sh-spin pointer-events-none absolute top-3 left-1/2 -ml-[160px] h-[170px] w-[320px]" />
-        <button class="sh-hit absolute bottom-[164px] left-1/2 -ml-[72px] h-[84px] w-[72px]" tabindex="-1" @click="poke('cardA')">
-          <span class="sh-float block h-full w-full" style="--dur: 4.6s; --amp: -7px"><img src="/simple/card-a.svg" alt="" class="h-full w-full" :class="{ 'pk-flip': pk.cardA, 'pk-pop': pk.pocket }" /></span>
-        </button>
-        <button class="sh-hit absolute bottom-[170px] left-1/2 -ml-1 h-[84px] w-[72px]" tabindex="-1" @click="poke('cardB')">
-          <span class="sh-float block h-full w-full" style="--dur: 5.2s; --amp: -9px; animation-delay: -1.4s"><img src="/simple/card-b.svg" alt="" class="h-full w-full" :class="{ 'pk-flip': pk.cardB, 'pk-pop pk-late': pk.pocket }" /></span>
-        </button>
-        <button class="sh-hit absolute bottom-[118px] left-1/2 -ml-[78px] h-[92px] w-[156px]" tabindex="-1" @click="poke('pocket')">
-          <span class="sh-bob block h-full w-full"><img src="/simple/pocket.svg" alt="" class="h-full w-full" :class="{ 'pk-wobble': pk.pocket }" /></span>
-        </button>
-        <button class="sh-hit absolute top-10 left-[14%] h-12 w-12 p-1" tabindex="-1" @click="poke('search')">
-          <span class="sh-float block h-full w-full" style="--dur: 3.8s; --amp: -6px; animation-delay: -0.6s"><img src="/simple/chip-search.svg" alt="" class="h-full w-full" :class="{ 'pk-spin': pk.search }" /></span>
-        </button>
-        <button class="sh-hit absolute top-4 right-[15%] h-11 w-11 p-1.5" tabindex="-1" @click="poke('spark')">
-          <span class="sh-float block h-full w-full" style="--dur: 4.2s; --amp: -8px; animation-delay: -2s"><img src="/simple/chip-spark.svg" alt="" class="h-full w-full" :class="{ 'pk-burst': pk.spark }" /></span>
-        </button>
-        <button class="sh-hit absolute bottom-6 left-[16%] h-[58px] w-[68px]" tabindex="-1" @click="poke('t1')">
-          <span class="sh-float block h-full w-full" style="--dur: 5.6s; --amp: -6px"><img src="/simple/tile-doc.svg" alt="" class="h-full w-full" :class="{ 'pk-hop': pk.t1 }" /></span>
-        </button>
-        <button class="sh-hit absolute bottom-0 left-1/2 -ml-[34px] h-[58px] w-[68px]" tabindex="-1" @click="poke('t2')">
-          <span class="sh-float block h-full w-full" style="--dur: 6.2s; --amp: -7px; animation-delay: -2.2s"><img src="/simple/tile-code.svg" alt="" class="h-full w-full" :class="{ 'pk-hop': pk.t2 }" /></span>
-        </button>
-        <button class="sh-hit absolute right-[16%] bottom-8 h-[58px] w-[68px]" tabindex="-1" @click="poke('t3')">
-          <span class="sh-float block h-full w-full" style="--dur: 5.9s; --amp: -6px; animation-delay: -3.6s"><img src="/simple/tile-cube.svg" alt="" class="h-full w-full" :class="{ 'pk-spin': pk.t3 }" /></span>
-        </button>
-        <img src="/simple/dot.svg" alt="" class="sh-twinkle pointer-events-none absolute bottom-[110px] left-[8%] h-3 w-3" style="--d: 0s" />
-        <img src="/simple/dot.svg" alt="" class="sh-twinkle pointer-events-none absolute right-[9%] bottom-[150px] h-2 w-2" style="--d: -1.2s" />
-        <img src="/simple/dot.svg" alt="" class="sh-twinkle pointer-events-none absolute bottom-[78px] left-[44%] h-2.5 w-2.5" style="--d: -2.1s" />
+      <!-- 输入框下方是常用标签，再下面是鹈鹕骑行 -->
+      <div v-if="phase === 'idle'" class="text-center">
+        <div class="sh-tags mx-auto mt-3.5 flex max-w-[640px] flex-wrap justify-center gap-x-1.5 gap-y-2 md:mt-4 md:gap-2">
+          <button v-for="(t, i) in tags" :key="t" type="button" class="sh-tag sh-row cursor-pointer rounded-full px-3 py-1 text-[12.5px] text-ink-2 hover:bg-white hover:text-brand md:px-3.5 md:py-1.5 md:text-[13px]" :style="{ '--d': `${i * 35}ms` }" @click="pickText(t)">{{ t }}</button>
+        </div>
+        <div class="relative mx-auto mt-4 h-[min(250px,32svh)] max-w-[360px] md:h-[min(330px,38vh)] md:max-w-[460px]" aria-hidden="true">
+          <iframe v-if="active" src="/simple/pelican.html" title="鹈鹕骑行" tabindex="-1" class="sh-pelican h-full w-full border-0" :class="{ 'is-ready': pelicanReady }" @load="pelicanReady = true" />
+        </div>
+        <p class="sh-slogan m-0 mt-1.5 text-[12px] tracking-[0.16em] text-[#577598]" :class="{ 'is-ready': pelicanReady }">好东西，装进口袋。好心情，骑着走。</p>
       </div>
 
       <!-- 结果 -->
-      <div v-else class="sh-results mt-4 pb-10">
+      <div v-if="phase !== 'idle'" class="sh-results mt-4 pb-10">
         <div class="mb-3 flex items-center gap-2">
           <button class="inline-flex cursor-pointer items-center gap-1 text-[13px] text-mute hover:text-brand" @click="backToIdle"><Icon name="arrow-left" :size="14" />重新开始</button>
           <button v-if="source === 'image' && shot.preview" class="h-8 w-8 shrink-0 cursor-pointer overflow-hidden rounded-md border border-line" title="换一张图片" @click="pickImage"><img :src="shot.preview" alt="当前图片" class="h-full w-full object-cover" /></button>
@@ -857,12 +1034,50 @@ narrowMq.addEventListener?.('change', (e) => (narrow.value = e.matches))
       </div>
     </div>
 
+    <!-- 录音浮层：实时出字、声波、上滑取消 -->
+    <Teleport to="body">
+      <Transition name="sh-rec">
+        <div v-if="rec.on" class="fixed inset-0 z-[70]" aria-live="polite">
+          <div class="absolute inset-0 bg-[rgb(11_31_68/0.32)]" />
+          <div class="sh-rec-card absolute inset-x-3 mx-auto max-w-[520px] rounded-[22px] bg-white/96 px-[18px] pt-[18px] pb-4 shadow-[0_24px_50px_-20px_rgb(11_47_122/0.7)]" :style="{ top: `${rec.top}px` }">
+            <p class="m-0 min-h-[46px] text-[15px] leading-[23px]" :class="rec.text ? 'text-ink' : 'text-mute'">{{ rec.text || (rec.starting ? '正在打开麦克风…' : '请说出你想找的…') }}</p>
+            <div class="sh-wave mt-2.5 flex h-11 items-center justify-center gap-1" :class="{ 'is-cancel': rec.cancel }" :style="{ '--lv': Math.min(1, rec.level * 6 + 0.25) }">
+              <i v-for="n in 14" :key="n" :style="{ '--h': `${[18, 30, 40, 24, 36, 44, 28, 38, 20, 32, 42, 22, 34, 16][n - 1]}px`, animationDelay: `${-(n * 0.13) % 1}s` }" />
+            </div>
+            <p class="mt-2 mb-0 text-center text-[12px]" :class="rec.cancel ? 'font-semibold text-danger' : 'text-mute'">{{ rec.cancel ? '松开取消' : '松开结束 · 上滑取消' }}</p>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <JoinBar :show="active && homeOn && phase === 'results' && !compareOn && picked.length > 0" :count="picked.length" :note="importingN ? `另有 ${importingN} 个加入中` : ''" :posting="joining" @join="doJoin" />
   </section>
 </template>
 
 <style scoped>
 .sh-idle { min-height: calc(100svh - 56px - 64px); }
+/* v3.3.103 手机：整页蓝色渐变，鹈鹕直接融在背景上 */
+.sh-agent { background: radial-gradient(120% 60% at 85% 0%, rgb(90 162 255 / 0.36), transparent 60%), radial-gradient(90% 50% at 0% 30%, rgb(30 86 214 / 0.14), transparent 70%), linear-gradient(180deg, #d6e5fd 0%, #e7f0fe 42%, var(--color-bg) 82%); }
+.sh-agent.sh-res { background: linear-gradient(180deg, #e3edfd 0, var(--color-bg) 220px); }
+.sh-pelican { opacity: 0; transition: opacity 0.5s ease; background: transparent; }
+.sh-pelican.is-ready { opacity: 1; }
+.sh-slogan { opacity: 0; transition: opacity 0.6s ease 0.15s; }
+.sh-slogan.is-ready { opacity: 1; }
+.sh-tag { background: rgb(255 255 255 / 0.72); box-shadow: inset 0 0 0 1px var(--color-line); transition: background-color 0.2s, color 0.2s, transform 0.2s; }
+.sh-tag:active { transform: scale(0.96); background: #fff; color: var(--color-brand); }
+.sh-fake { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.sh-polished { animation: shpolish 0.6s ease-out; }
+@keyframes shpolish { from { background: rgb(30 86 214 / 0.1); } to { background: transparent; } }
+.sh-mic { color: var(--color-brand); background: var(--color-brand-soft); -webkit-touch-callout: none; user-select: none; touch-action: none; transition: transform 0.2s, background-color 0.2s, color 0.2s; }
+.sh-mic.is-rec { color: #fff; background: linear-gradient(135deg, #2f6bf0, #1e56d6); transform: scale(1.08); }
+.sh-wave i { width: 4px; border-radius: 4px; background: linear-gradient(var(--color-sky), var(--color-brand)); transform-origin: center; animation: shwave 1s ease-in-out infinite; height: var(--h); transform: scaleY(calc(0.2 + var(--lv) * 0.8)); }
+.sh-wave.is-cancel i { background: var(--color-mute); }
+@keyframes shwave { 0%, 100% { transform: scaleY(0.18); } 50% { transform: scaleY(calc(0.25 + var(--lv) * 0.75)); } }
+/* 淡出时立刻脱离文档流：搜索框上移的终点按「没有鹈鹕和标题」的布局计算，不会先停在半路再跳上去 */
+.sh-rec-enter-active, .sh-rec-leave-active { transition: opacity 0.22s ease; }
+.sh-rec-enter-active .sh-rec-card, .sh-rec-leave-active .sh-rec-card { transition: transform 0.3s var(--ease-out-expo); }
+.sh-rec-enter-from, .sh-rec-leave-to { opacity: 0; }
+.sh-rec-enter-from .sh-rec-card, .sh-rec-leave-to .sh-rec-card { transform: translateY(-12px) scale(0.98); }
 .sh-box { border-color: var(--color-line); box-shadow: 0 18px 44px -28px rgb(11 47 122 / 0.55); transition: border-color 0.25s, box-shadow 0.25s; }
 .sh-box.is-focus { border-color: rgb(30 86 214 / 0.55); box-shadow: 0 0 0 4px rgb(30 86 214 / 0.1), 0 18px 44px -28px rgb(11 47 122 / 0.55); }
 .sh-box.is-drag { border-style: dashed; border-color: var(--color-brand); background: var(--color-brand-soft); }
@@ -912,6 +1127,12 @@ narrowMq.addEventListener?.('change', (e) => (narrow.value = e.matches))
 @keyframes pkhop { 0%, 100% { transform: translateY(0) rotate(0); } 35% { transform: translateY(-16px) rotate(-8deg); } 65% { transform: translateY(2px) rotate(4deg); } }
 @keyframes pkburst { 0% { transform: scale(1) rotate(0); } 40% { transform: scale(1.5) rotate(25deg); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
 @media (prefers-reduced-motion: reduce) {
-  .sh-float, .sh-spin, .sh-bob, .sh-breath, .sh-twinkle, .sh-in, .sh-fly, .sh-row { animation: none; }
+  .sh-float, .sh-spin, .sh-bob, .sh-breath, .sh-twinkle, .sh-in, .sh-fly, .sh-row, .sh-wave i { animation: none; }
 }
+</style>
+
+<style>
+/* 长按说话期间整页不可选，避免系统选字 / 全选的蒙层 */
+html.sh-noover, html.sh-noover body { overscroll-behavior-y: none; }
+html.sh-noselect, html.sh-noselect * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
 </style>

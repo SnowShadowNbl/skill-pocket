@@ -14,7 +14,7 @@ from .changelog import seed_changelog
 from .config import settings
 from .db import SessionLocal, upgrade_db
 from .models import Item, User
-from .routers import account, accounts_admin, ai_admin, admin, admin_batch1, analytics, asr, auth, categories, category_admin, changelog, comms_admin, content_admin, favorites, feedback, feedback_admin, finder, ingest_monitor, insights, items, maintenance, operations, media_admin, observability, ops_admin, compare, jobs, manage, moderation, notifications, risk_admin, search_assist, staff, takedown, tasks, track, uploads, user_care, wechat
+from .routers import account, accounts_admin, ai_admin, admin, admin_batch1, analytics, asr, auth, categories, category_admin, changelog, comms_admin, content_admin, favorites, feedback, feedback_admin, finder, ingest_monitor, insights, items, maintenance, operations, media_admin, observability, ops_admin, compare, jobs, manage, moderation, notifications, risk_admin, search_assist, staff, takedown, tasks, track, uploads, user_care, voice, wechat
 from .seed import seed_categories
 from .services import activity, anim, cache, crawler, geo, ingest, ipban, reclassify, scheduler, search, thumbs, visits
 from .services import rankings as rankings_svc
@@ -128,6 +128,7 @@ app.include_router(account.router)
 app.include_router(categories.router)
 app.include_router(items.router)
 app.include_router(search_assist.router)
+app.include_router(voice.router)  # v3.3.103 语音文字整理
 app.include_router(favorites.shared_router)
 app.include_router(notifications.router)
 app.include_router(wechat.router)

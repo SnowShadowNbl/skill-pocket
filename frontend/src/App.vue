@@ -53,7 +53,7 @@ const addOpen = ref(false)
 function pickAdd(kind) {
   addOpen.value = false
   if (kind === 'github') goCollect(router)
-  else if (kind === 'image') router.push('/').then(() => homeSignal.simpleImage++) // v3.3.96 简洁模式：扫描识别图片
+  else if (kind === 'image') route.path === '/' ? homeSignal.simpleImage++ : router.push('/').then(() => homeSignal.simpleImage++) // 简洁模式：图片搜索
   else goSiteSearch(router)
 }
 const simpleHome = computed(() => homeMode.value === 'simple')
@@ -200,8 +200,9 @@ onBeforeUnmount(() => {
         :style="{ transform: `translateX(${Math.max(activeTab, 0) * 100}%)`, opacity: activeTab < 0 ? 0 : 1 }"
       ><span class="h-[30px] w-[52px] rounded-full bg-brand-soft" /></span>
       <template v-for="t in TABS" :key="t.to || 'add'">
-        <button v-if="t.add" class="tab-add relative z-[1] grid cursor-pointer place-items-center" :class="{ open: addOpen }" aria-label="搜索" :aria-expanded="addOpen" @click="addOpen = !addOpen">
-          <span class="grid h-10 w-10 place-items-center rounded-xl bg-brand text-white shadow-[0_10px_20px_-10px_rgb(30_86_214/0.8)]"><Icon name="plus" :size="20" /></span>
+        <!-- v3.3.108 简洁模式：图标是图片，点了照旧弹出气泡（「扫描识别图片」） -->
+        <button v-if="t.add" class="tab-add relative z-[1] grid cursor-pointer place-items-center" :class="{ open: addOpen, 'is-img': simpleHome }" :aria-label="simpleHome ? '图片搜索' : '搜索'" :aria-expanded="addOpen" @click="addOpen = !addOpen">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-brand text-white shadow-[0_10px_20px_-10px_rgb(30_86_214/0.8)]"><Icon :name="simpleHome ? 'image' : 'plus'" :size="20" /></span>
         </button>
         <RouterLink
           v-else
@@ -296,6 +297,11 @@ onBeforeUnmount(() => {
 .tab-add.open > span {
   transform: rotate(135deg);
   border-radius: 50%;
+}
+/* 简洁模式是图片图标：不旋转，轻轻缩一下 */
+.tab-add.is-img:active > span, .tab-add.is-img.open > span {
+  transform: scale(0.92);
+  border-radius: 12px;
 }
 .fab-bubble {
   transition: transform 0.5s var(--ease-spring) var(--d), opacity 0.3s var(--ease-out-expo) var(--d);

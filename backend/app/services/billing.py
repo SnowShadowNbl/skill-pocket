@@ -38,7 +38,7 @@ PER_USE = (("截图识别", 4_000 * 2), ("智能对比", 7_000 * 2), ("功能搜
 META_DEFAULT = "quota_default_free"
 STAFF = ("admin", "subadmin", "moderator", "support", "viewer")
 # 平台自己的 AI，不计入用户额度
-NOT_BILLED = {"AI-18", "AI-12", "AI-13", "AI-14", "AI-15", "AI-16", "AI-geo"}
+NOT_BILLED = {"AI-18", "AI-12", "AI-13", "AI-14", "AI-15", "AI-16", "AI-geo", "AI-voice"}  # AI-voice：v3.3.103 语音文字整理
 KIND_LABEL = {"grant": "发放免费额度", "recharge": "充值", "adjust": "手动调整", "reset": "重置额度"}
 
 _owner: contextvars.ContextVar[int | None] = contextvars.ContextVar("billing_owner", default=None)
